@@ -3,6 +3,8 @@
 //  Copyright (C) 2022 Jason Hinsch
 //  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
 
+#define JKPRINT_VERSION_STRING "1.1"
+
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
 // printf, declare USE_SHELL_PRINTF with the path to the shell as a constant string.
@@ -73,7 +75,20 @@ static void putQuotedString(const char * str)
 	fputs_unlocked("\\\"", stdout);
 }
 
-	
+
+static void valPrintWithQuotedStrings(json_object * val)
+{
+	(json_type_string == json_object_get_type(val) ? putQuotedString :
+		putShEscapedString)(json_object_get_string(val));
+}
+
+
+static void valPrintWithoutQuotedStrings(json_object * val)
+{
+	putShEscapedString(json_object_get_string(val));
+}
+
+
 int main(int argc, char **argv)
 {
 	char *arrayVarName = "";
@@ -91,12 +106,13 @@ int main(int argc, char **argv)
 			{"empty-key", required_argument, NULL, 'e'},
 			{"obj-var", required_argument, NULL, 'o'},
 			{"quote-strings", no_argument, NULL, 'q'},
+			{"short-version", no_argument, NULL, 'v'},
 			{"type-var", required_argument, NULL, 't'},
-			{"version", no_argument, NULL, 'v'},
+			{"version", no_argument, NULL, 'V'},
 			{0, 0, 0, 0}
 		};
 		opterr = 0;
-		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:o:qt:", longopts, &currentoption)) )
+		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:o:qt:v", longopts, &currentoption)) )
 		{
 			switch(currentoption)
 			{
@@ -121,11 +137,9 @@ int main(int argc, char **argv)
 					"  When JSON is either an array or an object type, non-string typed members of\n"
 					"the output array can be fed back through this program for further processing.\n"
 					"String typed members can also be fed back through if the --quote-strings option\n"
-					"is specified.\n"
+					"was specified during for the array generation.\n"
 					"\n"
 					"OPTIONS:\n"
-					" --help\n"
-					"    This help screen\n"
 					" -a, --array-var=JSON_OBJ_TYPES\n"
 					"    When JSON_OBJ is either an array or object type, declare a third variable,\n"
 					"  named JSON_OBJ_TYPES, that contains an array or associative array containing\n"
@@ -133,6 +147,11 @@ int main(int argc, char **argv)
 					"  respectively.  The characters in this array are the same characters used in\n"
 					"  JSON_TYPE.  When JSON_OBJ_TYPES is an empty string, which is the default,\n"
 					"  this variable declaration is omitted from the output\n"
+					//" -b, --object-declaration\n"
+					//" -d, --declare-string=DECLARE_STRING\n"
+					//"    Specify a string for declarations, typically 'local'.  The default is\n"
+					//"  'typeset'.  If this is blank, no declaration will be made for types other\n"
+					//"  than object.  See also --object-declaration\n"
 					" -e, --empty-key=EMPTY_KEY\n"
 					"    Empty keys are valid in JSON but not in shell script arrays.  Specify a\n"
 					"  string to replace empty keys with.  The default is \"$'\\1'\".  This value\n"
@@ -141,14 +160,18 @@ int main(int argc, char **argv)
 					" -o, --obj-var=JSON_OBJ\n"
 					"    Specify a variable name for JSON_OBJ other than the default, JSON_OBJ.\n"
 					"  If blank, the object and array variables will be omitted from the output\n"
-					" -q, --quote strings\n"
+					" -q, --quote-strings\n"
 					"    Include quotations around output string values so that they can be fed back\n"
 					"  through this program with corresponding type detection\n"
 					" -t, --type-var=JSON_TYPE\n"
 					"    Specify a variable name for JSON_TYPE other than the default, JSON_TYPE.\n"
 					"  If blank, the type variable will be omitted from the output\n"
+					" -v, --short-version\n"
+					"    Output just the version number and exit\n"
+					" --help\n"
+					"    This help screen\n"
 					" --version\n"
-					"    Output the version information and exit\n"
+					"    Output version, copyright, and build options, then exit\n"
 					"  Any non-empty variable name specified via an option will appear verbatim in\n"
 					"the output without additional verification.\n"
 					"  There is no special handling for duplicated keys in objects.  When there are\n"
@@ -172,7 +195,11 @@ int main(int argc, char **argv)
 				typeVarName = optarg;
 				break;
 			case 'v':
-				fputs_unlocked("jkparse version 1\nCopyright (C) 2022 Jason Hinsch\n"
+				fputs_unlocked(JKPRINT_VERSION_STRING "\n", stdout);
+				return EXIT_SUCCESS;
+				break;
+			case 'V':
+				fputs_unlocked("jkparse version " JKPRINT_VERSION_STRING "\nCopyright (C) 2022 Jason Hinsch\n"
 					"License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n"
 					"Compiled with "
 					#ifdef USE_SHELL_PRINTF
@@ -235,69 +262,57 @@ int main(int argc, char **argv)
 	}
 	void printObject(void (*valuePrintFunction)(json_object *))
 	{
-		int outputSeperator = 0;
+		const char * openBracketStr = "[";
 		json_object_object_foreach(obj, key, val)
 		{
-			if(outputSeperator)
-				fputs_unlocked(" [", stdout);
-			else
+			fputs_unlocked(openBracketStr, stdout);
+			openBracketStr = " [";
+			if(*key)
 			{
-				outputSeperator = 1;
-				putc_unlocked('[', stdout);
-			}
-			char * keyStart = key;
-			//  Escape the following characters in the key output: !"$'();<>[\]`|
-			//  () need to be escaped for zsh.  Excaping these makes no difference in bash or ksh.
-			//  zsh is particularly finicky about ", ', ;, <, >, and | characters in array
-			// subscripts.  It is not enough to escape these characters; they must come from either a
-			// variable or command substitution.  $'|' or $'\x7c', for example, do not work.
-			//  '#' could also be escaped for better ASCII grouping in bash and ksh, but not in zsh
-			do
-			{
-				//  badZshChar will be set when a character which is problemetic for zsh is found
-				int badZshChar = 0;
+				int keyVal = *key;
+				//  Escape the following characters in the key output: !"$'();<>[\]`|
+				//  () need to be escaped for zsh.  Excaping these makes no difference in bash or ksh.
+				//  zsh is particularly finicky about ", ', ;, <, >, and | characters in array
+				// subscripts.  It is not enough to escape these characters - they must come from either
+				// a variable or command substitution.  $'|' or $'\x7c', for example, do not work.
+				//  '#' could also be escaped for better ASCII grouping in bash and ksh, but not in zsh
 				char * segmentStart = key;
-				int keyVal;
 				while(
-					(keyVal = *key) && (
-						('"' != keyVal && '\'' != keyVal && ';' != keyVal && '<' != keyVal &&
-							'>' != keyVal && '|' != keyVal) || ({ badZshChar = 1; 0; })
-					) && '!' != keyVal  && '$' != keyVal && '(' != keyVal && ')' != keyVal &&
-					//  This range includes '\\'
-					('[' > keyVal || ']' < keyVal) && '`' != keyVal
-				)
-					key++;
-				if(keyVal)
-				{
-					if(badZshChar)
-					{
-						//  Ouput the rest of the key as a command substitution
+					('"' != keyVal && '\'' != keyVal && ';' != keyVal &&
+						'<' != keyVal && '>' != keyVal && '|' != keyVal
+					) ? (
+						('!' != keyVal  && '$' != keyVal && '(' != keyVal && ')' != keyVal &&
+							//  This range includes '\\'
+							('[' > keyVal || ']' < keyVal) && '`' != keyVal
+						) ? (
+							(keyVal = *(++key)) || ({
+								fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
+								0;
+							})
+						) : ({
+							//  Output all characters proceding the character needing escaping, and
+							// then output the escaped character
+							fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
+							putc_unlocked('\\', stdout);
+							putc_unlocked(keyVal, stdout);
+							keyVal = *(segmentStart = ++key);
+						})
+					) : ({
+						//  This character requires substitution in zsh.  Output the rest
+						// of the key as a command substitution
 						fputs_unlocked("$(echo ", stdout);
 						putShEscapedString(segmentStart);
 						putc_unlocked(')', stdout);
-						break;
-					}
-					else
-					{
-						//  Output all characters proceding the character needing escaping, and
-						// then output the escaped character
-						fwrite_unlocked(segmentStart, (key++) - segmentStart, 1, stdout);
-						putc_unlocked('\\', stdout);
-						putc_unlocked(keyVal, stdout);
-					}
-				}
-				else
-				{
-					if(key == keyStart)
-						//  Empty keys are valid in JSON but not in shell scripts.
-						// Output emptyKey as the key.
-						fputs_unlocked(emptyKey, stdout);
-					else
-						fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
-					break;
-				}
+						0;
+					})
+				);
 			}
-			while(*key);
+			else
+			{
+				//  Empty keys are valid in JSON but not in shell scripts.
+				// Output emptyKey as the key.
+				fputs_unlocked(emptyKey, stdout);
+			}
 			fputs_unlocked("]=", stdout);
 			valuePrintFunction(val);
 		}
@@ -318,15 +333,6 @@ int main(int argc, char **argv)
 		printTypeAndBeginObjWithType(associativeDeclareType);
 		putc_unlocked('(', stdout);
 		{
-			void valPrintWithQuotedStrings(json_object * val)
-			{
-				(json_type_string == json_object_get_type(val) ? putQuotedString :
-					putShEscapedString)(json_object_get_string(val));
-			}
-			void valPrintWithoutQuotedStrings(json_object * val)
-			{
-				putShEscapedString(json_object_get_string(val));
-			}
 			printObject(quoteStrings ? valPrintWithQuotedStrings : valPrintWithoutQuotedStrings);
 		}
 		if(*arrayVarName)
@@ -343,28 +349,30 @@ int main(int argc, char **argv)
 	case json_type_array:
 		printTypeAndBeginObjWithType(arrayDeclareType);
 		putc_unlocked('(', stdout);
-		int arrayLength = json_object_array_length(obj);
-		for(int index = 0; index < arrayLength; index++)
 		{
-			if(index)
-				putc_unlocked(' ', stdout);
-			json_object * objAtIndex;
-			if(NULL == (objAtIndex = json_object_array_get_idx(obj, index)))
-				fputs_unlocked("''", stdout);
-			else
-			{
-				(quoteStrings && json_type_string == json_object_get_type(objAtIndex) ? putQuotedString :
-					putShEscapedString)(json_object_get_string(objAtIndex));
-			}
-		}
-		if(*arrayVarName)
-		{
-			printArrayClosureAndBeginArrayVar(arrayDeclareType);
+			void (*valPrint)(json_object *) = quoteStrings
+				? valPrintWithQuotedStrings : valPrintWithoutQuotedStrings;
+			int arrayLength = json_object_array_length(obj);
 			for(int index = 0; index < arrayLength; index++)
 			{
 				if(index)
 					putc_unlocked(' ', stdout);
-				putc_unlocked(*json_type_to_name(json_object_get_type(json_object_array_get_idx(obj, index))), stdout);
+				json_object * objAtIndex;
+				if(NULL == (objAtIndex = json_object_array_get_idx(obj, index)))
+					fputs_unlocked("''", stdout);
+				else
+					valPrint(objAtIndex);
+			}
+			if(*arrayVarName)
+			{
+				printArrayClosureAndBeginArrayVar(arrayDeclareType);
+				for(int index = 0; index < arrayLength; index++)
+				{
+					if(index)
+						putc_unlocked(' ', stdout);
+					putc_unlocked(*json_type_to_name(json_object_get_type(
+						json_object_array_get_idx(obj, index))), stdout);
+				}
 			}
 		}
 		puts(")");
