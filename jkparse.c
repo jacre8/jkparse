@@ -1,9 +1,10 @@
 //  jkparse
-//  JSON parser for shell scripts that utilizes the array capabilities of ksh and similar shells.
+//  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
+// similar shells.
 //  Copyright (C) 2022 Jason Hinsch
 //  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
 
-#define JKPRINT_VERSION_STRING "1.1"
+#define JKPRINT_VERSION_STRING "1.2"
 
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
@@ -15,6 +16,7 @@
 #elif ! defined(PRINTF_EXECUTABLE)
 	#define PRINTF_EXECUTABLE "/usr/bin/printf"
 #endif
+//#define TRIM_ARRAY_LEADING_SPACE  // for vanity's sake
 
 #define _GNU_SOURCE // for fputs_unlocked
 //  It is recommended that a symlink be created at json-c/json.h if it is located somewhere else.
@@ -95,6 +97,7 @@ int main(int argc, char **argv)
 	char *objVarName = "JSON_OBJ";
 	char *typeVarName = "JSON_TYPE";
 	char *emptyKey = "$'\\1'";
+	const char * declareStr = "typeset";
 	int quoteStrings = 0;
 	__fsetlocking(stdout, FSETLOCKING_BYCALLER);
 	{
@@ -104,6 +107,7 @@ int main(int argc, char **argv)
 			{"help", no_argument, NULL, '!'},
 			{"array-var", required_argument, NULL, 'a'},
 			{"empty-key", required_argument, NULL, 'e'},
+			{"local-declarations", no_argument, NULL, 'l'},
 			{"obj-var", required_argument, NULL, 'o'},
 			{"quote-strings", no_argument, NULL, 'q'},
 			{"short-version", no_argument, NULL, 'v'},
@@ -112,7 +116,7 @@ int main(int argc, char **argv)
 			{0, 0, 0, 0}
 		};
 		opterr = 0;
-		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:o:qt:v", longopts, &currentoption)) )
+		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:lo:qt:v", longopts, &currentoption)) )
 		{
 			switch(currentoption)
 			{
@@ -137,7 +141,7 @@ int main(int argc, char **argv)
 					"  When JSON is either an array or an object type, non-string typed members of\n"
 					"the output array can be fed back through this program for further processing.\n"
 					"String typed members can also be fed back through if the --quote-strings option\n"
-					"was specified during for the array generation.\n"
+					"is specified when the array is generated.\n"
 					"\n"
 					"OPTIONS:\n"
 					" -a, --array-var=JSON_OBJ_TYPES\n"
@@ -147,16 +151,13 @@ int main(int argc, char **argv)
 					"  respectively.  The characters in this array are the same characters used in\n"
 					"  JSON_TYPE.  When JSON_OBJ_TYPES is an empty string, which is the default,\n"
 					"  this variable declaration is omitted from the output\n"
-					//" -b, --object-declaration\n"
-					//" -d, --declare-string=DECLARE_STRING\n"
-					//"    Specify a string for declarations, typically 'local'.  The default is\n"
-					//"  'typeset'.  If this is blank, no declaration will be made for types other\n"
-					//"  than object.  See also --object-declaration\n"
 					" -e, --empty-key=EMPTY_KEY\n"
 					"    Empty keys are valid in JSON but not in shell script arrays.  Specify a\n"
 					"  string to replace empty keys with.  The default is \"$'\\1'\".  This value\n"
 					"  must be suitable for shell use.  No verification or substitution in output is\n"
-					"  made for a non-empty value that is specified here\n"
+					"  made for a non-empty value that is specified here.  An empty value is invalid\n"
+					" -l, --local-declarations\n"
+					"    Declare variables using the local keyword rather than the default, typeset\n"
 					" -o, --obj-var=JSON_OBJ\n"
 					"    Specify a variable name for JSON_OBJ other than the default, JSON_OBJ.\n"
 					"  If blank, the object and array variables will be omitted from the output\n"
@@ -185,6 +186,9 @@ int main(int argc, char **argv)
 			case 'e':
 				emptyKey = optarg;
 				break;
+			case 'l':
+				declareStr = "local";
+				break;
 			case 'o':
 				objVarName = optarg;
 				break;
@@ -199,15 +203,20 @@ int main(int argc, char **argv)
 				return EXIT_SUCCESS;
 				break;
 			case 'V':
-				fputs_unlocked("jkparse version " JKPRINT_VERSION_STRING "\nCopyright (C) 2022 Jason Hinsch\n"
+				fputs_unlocked("jkparse version " JKPRINT_VERSION_STRING
+					"\nCopyright (C) 2022 Jason Hinsch\n"
 					"License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n"
-					"Compiled with "
-					#ifdef USE_SHELL_PRINTF
-						"USE_SHELL_PRINTF=\"" USE_SHELL_PRINTF
-					#else
-						"PRINTF_EXECUTABLE=\"" PRINTF_EXECUTABLE
+					"Compiled with:\n"
+					#ifndef USE_SHELL_PRINTF
+						" PRINTF_EXECUTABLE=\"" PRINTF_EXECUTABLE "\"\n"
 					#endif
-					"\"\n", stdout
+					#ifdef TRIM_ARRAY_LEADING_SPACE
+						" TRIM_ARRAY_LEADING_SPACE\n"
+					#endif
+					#ifdef USE_SHELL_PRINTF
+						" USE_SHELL_PRINTF=\"" USE_SHELL_PRINTF "\"\n"
+					#endif
+					, stdout
 				);
 				return EXIT_SUCCESS;
 				break;
@@ -237,7 +246,7 @@ int main(int argc, char **argv)
 	{
 		if(*typeVarName)
 		{
-			printf("typeset %s=%c\n", typeVarName, *json_type_to_name(type));
+			printf("%s %s=%c\n", declareStr, typeVarName, *json_type_to_name(type));
 		}
 		return 0;
 	}
@@ -245,12 +254,12 @@ int main(int argc, char **argv)
 	static const char * arrayDeclareType = "-a ";
 	void printTypeAndBeginObjWithType(const char * declareType)
 	{
-		static const char * printTemplate = "typeset %s=%c\ntypeset %s%s=";
+		static const char * printTemplate = "%s %s=%c\n%s %s%s=";
 		if(*typeVarName)
-			printf(printTemplate, typeVarName, *json_type_to_name(type),
-				declareType, objVarName);
+			printf(printTemplate, declareStr, typeVarName, *json_type_to_name(type),
+				declareStr, declareType, objVarName);
 		else
-			printf(printTemplate + 14, declareType, objVarName);
+			printf(printTemplate + 9, declareStr, declareType, objVarName);
 	}
 	void printTypeAndBeginObj(void)
 	{
@@ -258,15 +267,21 @@ int main(int argc, char **argv)
 	}
 	void printArrayClosureAndBeginArrayVar(const char * declareType)
 	{
-		printf(")\ntypeset %s%s=(", declareType, arrayVarName);
+		printf(")\n%s %s%s=(", declareStr, declareType, arrayVarName);
 	}
 	void printObject(void (*valuePrintFunction)(json_object *))
 	{
+	#ifdef TRIM_ARRAY_LEADING_SPACE
 		const char * openBracketStr = "[";
 		json_object_object_foreach(obj, key, val)
 		{
 			fputs_unlocked(openBracketStr, stdout);
 			openBracketStr = " [";
+	#else
+		json_object_object_foreach(obj, key, val)
+		{
+			fputs_unlocked(" [", stdout);
+	#endif
 			if(*key)
 			{
 				int keyVal = *key;
@@ -355,7 +370,9 @@ int main(int argc, char **argv)
 			int arrayLength = json_object_array_length(obj);
 			for(int index = 0; index < arrayLength; index++)
 			{
+			#ifdef TRIM_ARRAY_LEADING_SPACE
 				if(index)
+			#endif
 					putc_unlocked(' ', stdout);
 				json_object * objAtIndex;
 				if(NULL == (objAtIndex = json_object_array_get_idx(obj, index)))
@@ -368,7 +385,9 @@ int main(int argc, char **argv)
 				printArrayClosureAndBeginArrayVar(arrayDeclareType);
 				for(int index = 0; index < arrayLength; index++)
 				{
+				#ifdef TRIM_ARRAY_LEADING_SPACE
 					if(index)
+				#endif
 						putc_unlocked(' ', stdout);
 					putc_unlocked(*json_type_to_name(json_object_get_type(
 						json_object_array_get_idx(obj, index))), stdout);
