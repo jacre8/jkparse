@@ -4,12 +4,12 @@
 //  Copyright (C) 2022 Jason Hinsch
 //  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
 
-#define JKPRINT_VERSION_STRING "1.2"
+#define JKPRINT_VERSION_STRING "2"
 
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
 // printf, declare USE_SHELL_PRINTF with the path to the shell as a constant string.
-// E.g: gcc -D 'USE_SHELL_PRINTF="/bin/ksh"' -O2 -o jkparse jkparse.c -ljson-c
+// E.g: gcc -D USE_SHELL_PRINTF=/bin/ksh -O2 -o jkparse jkparse.c -ljson-c
 
 #ifdef USE_SHELL_PRINTF
 	#define PRINTF_EXECUTABLE USE_SHELL_PRINTF
@@ -17,6 +17,9 @@
 	#define PRINTF_EXECUTABLE "/usr/bin/printf"
 #endif
 //#define TRIM_ARRAY_LEADING_SPACE  // for vanity's sake
+//  At least as early as zsh v5.7.1, the workarounds with the following option are uneceesary.
+// These issues may event have been fixed by v5.5.
+//#define WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
 
 #define _GNU_SOURCE // for fputs_unlocked
 //  It is recommended that a symlink be created at json-c/json.h if it is located somewhere else.
@@ -142,6 +145,9 @@ int main(int argc, char **argv)
 					"the output array can be fed back through this program for further processing.\n"
 					"String typed members can also be fed back through if the --quote-strings option\n"
 					"is specified when the array is generated.\n"
+					"  There is no special handling for duplicated keys in objects.  When there are\n"
+					"duplicate keys, multiple assignments will be output in the order that the keys\n"
+					"appear in the original JSON.\n"
 					"\n"
 					"OPTIONS:\n"
 					" -a, --array-var=JSON_OBJ_TYPES\n"
@@ -175,9 +181,6 @@ int main(int argc, char **argv)
 					"    Output version, copyright, and build options, then exit\n"
 					"  Any non-empty variable name specified via an option will appear verbatim in\n"
 					"the output without additional verification.\n"
-					"  There is no special handling for duplicated keys in objects.  When there are\n"
-					"duplicate keys, multiple assignments will be output in the order that the keys\n"
-					"appear in the original JSON.\n"
 				);
 				return EXIT_SUCCESS;
 			case 'a':
@@ -215,6 +218,9 @@ int main(int argc, char **argv)
 					#endif
 					#ifdef USE_SHELL_PRINTF
 						" USE_SHELL_PRINTF=\"" USE_SHELL_PRINTF "\"\n"
+					#endif
+					#ifdef WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
+						" WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS\n"
 					#endif
 					, stdout
 				);
@@ -285,18 +291,24 @@ int main(int argc, char **argv)
 			if(*key)
 			{
 				int keyVal = *key;
-				//  Escape the following characters in the key output: !"$'();<>[\]`|
-				//  () need to be escaped for zsh.  Excaping these makes no difference in bash or ksh.
-				//  zsh is particularly finicky about ", ', ;, <, >, and | characters in array
+				//  Escape the following characters, newline, tab, and space in the key output:
+				//  !"$'();<>[\]`|  
+				//  () and whitespace need to be escaped for zsh.  Excaping these makes no
+				// difference in bash or ksh.  '#' could also be escaped for better ASCII
+				// grouping in bash and ksh, but not in zsh
+				char * segmentStart = key;
+			#ifdef WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
+				//  Old zsh versions are particularly finicky about ", ', ;, <, >, and | characters in array
 				// subscripts.  It is not enough to escape these characters - they must come from either
 				// a variable or command substitution.  $'|' or $'\x7c', for example, do not work.
-				//  '#' could also be escaped for better ASCII grouping in bash and ksh, but not in zsh
-				char * segmentStart = key;
 				while(
-					('"' != keyVal && '\'' != keyVal && ';' != keyVal &&
+					(
+						'"' != keyVal && '\'' != keyVal && ';' != keyVal &&
 						'<' != keyVal && '>' != keyVal && '|' != keyVal
 					) ? (
-						('!' != keyVal  && '$' != keyVal && '(' != keyVal && ')' != keyVal &&
+						(
+							'\t' != keyVal && '\n' != keyVal && ' ' != keyVal && '!' != keyVal &&
+							 '$' != keyVal && '(' != keyVal && ')' != keyVal &&
 							//  This range includes '\\'
 							('[' > keyVal || ']' < keyVal) && '`' != keyVal
 						) ? (
@@ -321,6 +333,34 @@ int main(int argc, char **argv)
 						0;
 					})
 				);
+			#else
+				while(
+					(
+						'\t' != keyVal && '\n' != keyVal &&
+						//  This range includes '!':
+						(' ' > keyVal || '"' < keyVal) &&
+						'$' != keyVal &&
+						//  This range includes '(':
+						('\'' > keyVal || ')' < keyVal) &&
+						';' != keyVal && '<' != keyVal && '>' != keyVal && 
+						//  This range includes '\\':
+						('[' > keyVal || ']' < keyVal) &&
+						'`' != keyVal && '|' != keyVal
+					) ? (
+						(keyVal = *(++key)) || ({
+							fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
+							0;
+						})
+					) : ({
+						//  Output all characters proceding the character needing escaping, and
+						// then output the escaped character
+						fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
+						putc_unlocked('\\', stdout);
+						putc_unlocked(keyVal, stdout);
+						keyVal = *(segmentStart = ++key);
+					})
+				);
+			#endif
 			}
 			else
 			{
