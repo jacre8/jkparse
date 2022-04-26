@@ -11,13 +11,19 @@ Why another JSON parser?
 An associative array seems like the most natural approach for
 transversing a JSON object in a shell script.  I could not find a parser
 intended for shell use that easily exports a JSON object to a shell
-array, so I set about creating one.  I did not look very hard...  A
-pre-existing alternative that I later found is [jsoncvt](https://github.com/krz8/jsoncvt).
-I haven't tried that one out yet.  Relative to that, this one may be
-preferable if you already have a json-c library dependency elsewhere.  
+array, so I set about creating one.  I later found a pre-existing
+alternative that can already generate associative arrays for ksh: 
+[jsoncvt](https://github.com/krz8/jsoncvt).  Relative to that, this one
+may be preferable if strict bash or zsh compatibility is desired, if you
+need type detection, if you already have a json-c library dependency, or
+if it is desired to permit arbitrary characters in keys.  Conversely,
+jsoncvt has less dependencies and supports generating multidimensional
+arrays for ksh.  
   
-This implementation prioritizes simplicity and efficiency over
-portability.  
+Bare POSIX/ash shells are not intended targets for this implementation
+as there are alternatives that already work well within that constraint.
+This utilizes gcc and glibc extensions which are not universally
+recognized.  
 
 Exampe Use
 ----------
@@ -100,9 +106,9 @@ Exampe Use
 	"with
 	a newline"
 	
-	$ jkparse 42
-	typeset JSON_TYPE=i
-	typeset JSON_OBJ=42
+	$ jkparse -o '$OBJ' -t '$TYPE' 42
+	typeset $TYPE=i
+	typeset $OBJ=42
 	
 	$ jkparse -l {23:}
 	local JSON_TYPE=n
@@ -111,6 +117,7 @@ Exampe Use
 
 Building and Installing
 -----------------------
+
 Second to the json-c library, the biggest dependency is for a printf
 command that supports the %q format option.  Either a standalone printf
 binary or a shell supporting this format option must be available.  The
