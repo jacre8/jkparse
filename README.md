@@ -5,6 +5,7 @@ A JSON parser for shell scripts that utilizes the (associative) array
 capabilities of bash, ksh, zsh, and similar shells.  Programmed in C.
 Uses the [json-c](https://github.com/json-c/json-c/wiki) library.
 
+
 Why another JSON parser?
 ------------------------
 
@@ -24,6 +25,7 @@ Bare POSIX/ash shells are not intended targets for this implementation
 as there are alternatives that already work well within that constraint.
 This utilizes gcc and glibc extensions which are not universally
 recognized.  
+
 
 Exampe Use
 ----------
@@ -121,21 +123,25 @@ Building and Installing
 Second to the json-c library, the biggest dependency is for a printf
 command that supports the %q format option.  Either a standalone printf
 binary or a shell supporting this format option must be available.  The
-coreutils version of printf works.  If that is okay, and it is in the
-standard location of /usr/bin/printf, the following may be used for
-building:  
+coreutils version of printf works.  Without an override, the make target
+will search the build host for a viable printf function.  If that is
+okay, the following may be used for building:  
 
-	gcc -O2 -o jkparse jkparse.c -ljson-c
+	make
+
 For specifying a different location for a printf binary:  
 
-	gcc -D 'PRINTF_EXECUTABLE="/bin/printf"'-O2 -o jkparse jkparse.c -ljson-c
+	make PRINTF_EXECUTABLE=/bin/printf
+
 If using a shell's built-in printf function:  
 
-	gcc -D 'USE_SHELL_PRINTF="/bin/ksh"' -O2 -o jkparse jkparse.c -ljson-c
-Once compiled, as root, install the output executable in a location
-accesible via $PATH, e.g.:  
+	make USE_SHELL_PRINTF=/bin/ksh
 
-	sudo install -o root -g root -m 0755 jkparse /usr/local/bin
+Once compiled, install the output executable in a suitable location as
+root.  The default install target places it in /usr/local/bin:  
+
+	sudo make install
+
 
 Alternatives
 ------------

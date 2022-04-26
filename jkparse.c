@@ -4,7 +4,7 @@
 //  Copyright (C) 2022 Jason Hinsch
 //  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
 
-#define JKPRINT_VERSION_STRING "2"
+#define JKPRINT_VERSION_STRING "2.1"
 
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
@@ -12,13 +12,16 @@
 // E.g: gcc -D USE_SHELL_PRINTF=/bin/ksh -O2 -o jkparse jkparse.c -ljson-c
 
 #ifdef USE_SHELL_PRINTF
+	#ifndef SHELL_BASENAME
+		#define SHELL_BASENAME "ksh"
+	#endif
 	#define PRINTF_EXECUTABLE USE_SHELL_PRINTF
 #elif ! defined(PRINTF_EXECUTABLE)
 	#define PRINTF_EXECUTABLE "/usr/bin/printf"
 #endif
 //#define TRIM_ARRAY_LEADING_SPACE  // for vanity's sake
 //  At least as early as zsh v5.7.1, the workarounds with the following option are uneceesary.
-// These issues may event have been fixed by v5.5.
+// These issues may even have been fixed by v5.5.
 //#define WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
 
 #define _GNU_SOURCE // for fputs_unlocked
@@ -36,13 +39,9 @@
 #include <stdio.h>
 #include <stdio_ext.h> // __fsetlocking()
 #include <stdlib.h>
-#ifdef USE_SHELL_PRINTF
-	#include <string.h>
-#endif
 #include <sysexits.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
 
 static void putShEscapedString(const char * str)
 {
@@ -51,9 +50,9 @@ static void putShEscapedString(const char * str)
 	if(0 == pid) 
 	{
 	#ifdef USE_SHELL_PRINTF
-			static const char * const shellExec = USE_SHELL_PRINTF;
-			char * name = basename(shellExec);
-			execv(shellExec, (char * const []){name, "-c", "printf %q \"$1\"", name, (char *)str, NULL});
+			static const char * const shellBasename = SHELL_BASENAME;
+			execv(USE_SHELL_PRINTF, (char * const []){(char *)shellBasename, "-c", "printf %q \"$1\"",
+					(char *)shellBasename, (char *)str, NULL});
 	#else
 			//execv("/usr/bin/env", (char * const []){"env", "printf", "%q", (char *)str, NULL});
 			execv(PRINTF_EXECUTABLE, (char * const []){"printf", "%q", (char *)str, NULL});
