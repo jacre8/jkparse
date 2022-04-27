@@ -4,7 +4,7 @@
 //  Copyright (C) 2022 Jason Hinsch
 //  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
 
-#define JKPRINT_VERSION_STRING "2.1"
+#define JKPRINT_VERSION_STRING "2.2"
 
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
@@ -186,7 +186,11 @@ int main(int argc, char **argv)
 				arrayVarName = optarg;
 				break;
 			case 'e':
-				emptyKey = optarg;
+				if(! *(emptyKey = optarg))
+				{
+					fprintf(stderr, "An empty argument for --empty-key is invalid\n");
+					return EX_USAGE;
+				}
 				break;
 			case 'l':
 				declareStr = "local";
@@ -235,17 +239,8 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	if(optind >= argc)
-	{
-		fprintf(stderr, "JSON input missing\n");
-		return EX_USAGE;
-	}
-	if(! *emptyKey)
-	{
-		fprintf(stderr, "The argument for --empty-key is blank\n");
-		return EX_USAGE;
-	}
-	json_object * obj = json_tokener_parse(argv[optind]);
+	//  If the JSON argument is missing, treat it as a null object
+	json_object * obj = json_tokener_parse(optind >= argc ? "" : argv[optind]);
 	json_type type = json_object_get_type(obj);
 	if(0 == *objVarName)
 	{

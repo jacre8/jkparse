@@ -155,3 +155,4 @@ Alternatives
 [libshell](https://github.com/legionus/libshell)  
 [posix-awk-shell-jq](https://github.com/vcheckzen/posix-awk-shell-jq)  
 [json-to-sh](https://github.com/mlvzk/json-to-sh)
+[jwalk](https://github.com/shellbound/jwalk/)

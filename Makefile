@@ -16,8 +16,7 @@ jkparse : jkparse.c | $(BINDIR)
 		elif [ -n "$(PRINTF_EXECUTABLE)" ];then \
 			echo -D PRINTF_EXECUTABLE=\\\"$(PRINTF_EXECUTABLE)\\\"; \
 		elif envPrintf=$$(which printf) && \
-		$$envPrintf %q a >/dev/null;then \
-			[ "$$envPrintf" = /usr/bin/printf ] || \
+		$$envPrintf %q a >/dev/null 2>&1;then \
 			echo -D \'PRINTF_EXECUTABLE="\"$$envPrintf\""\'; \
 		elif \
 			if [ -f /bin/ksh ];then \
