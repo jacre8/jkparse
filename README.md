@@ -33,8 +33,9 @@ Exampe Use
 	$ jkparse --help
 	Typical usage: . <(jkparse [OPTIONS...] [JSON])
 	  Parse JSON and return shell code for variable initialization based on the
-	JSON contents.  The returned shell code can be processed by bash v4+, ksh93,
-	or zsh v5.5+.  Two variable declarations are output:
+	JSON contents.  This will read the JSON to parse either from an argument or, if
+	that is not present, from stdin.  The returned shell code can be processed by
+	bash v4+, ksh93, or zsh v5.5+.  Two variable declarations are output:
 	  JSON_TYPE - this is a single character describing the detected type of the
 	JSON argument.  This character is the first character for one of the following
 	types: null, boolean, int, double, string, array, or object.  The type will be
@@ -54,6 +55,9 @@ Exampe Use
 	  There is no special handling for duplicated keys in objects.  When there are
 	duplicate keys, multiple assignments will be output in the order that the keys
 	appear in the original JSON.
+	  This does not stream process the input when reading from stdin; if ever input
+	stream processing were implemented, this may output the variable declarations
+	twice.
 
 	OPTIONS:
 	 -a, --array-var=JSON_OBJ_TYPES
@@ -68,11 +72,6 @@ Exampe Use
 	  string to replace empty keys with.  The default is "$'\1'".  This value
 	  must be suitable for shell use.  No verification or substitution in output is
 	  made for a non-empty value that is specified here.  An empty value is invalid
-	 -i, --stdin
-	    Read JSON from stdin rather than from an argument.  This permits larger
-	  JSON objects to be input.  This does not stream process the input; if ever
-	  input stream processing were implemented, this may output the variable
-	  declarations twice
 	 -l, --local-declarations
 	    Declare variables using the local keyword rather than the default, typeset
 	 -o, --obj-var=JSON_OBJ
@@ -111,15 +110,15 @@ Exampe Use
 	n
 	
 	$ printf '["string", "with\na newline", 5]' > /tmp/jarray
-	$ . <(jkparse -q "$(< /tmp/jarray)")
-	$ # This would also work: . <(jkparse -qi < /tmp/jarray)
+	$ . <(jkparse -q < /tmp/jarray)
+	$ # This would also work: . <(jkparse -q "$(< /tmp/jarray)")
 	$ echo $JSON_TYPE
 	a
 	$ echo "${JSON_OBJ[1]}" # assuming ksh indexing...
 	"with
 	a newline"
 	
-	$ echo 42 | jkparse -io '$OBJ' -t '$TYPE'
+	$ echo 42 | jkparse -o '$OBJ' -t '$TYPE'
 	typeset $TYPE=i;typeset $OBJ=42
 	
 	$ jkparse -l {23:}

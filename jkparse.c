@@ -5,7 +5,7 @@
 //  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
 //  See https://github.com/jacre8/jkparse for the latest version and documentation
 
-#define JKPRINT_VERSION_STRING "3"
+#define JKPRINT_VERSION_STRING "4"
 
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
@@ -102,7 +102,6 @@ int main(int argc, char **argv)
 	char *emptyKey = "$'\\1'";
 	const char * declareStr = "typeset";
 	int quoteStrings = 0;
-	int streamInput = 0;
 	int unsetVars = 0;
 	__fsetlocking(stdout, FSETLOCKING_BYCALLER);
 	{
@@ -116,14 +115,13 @@ int main(int argc, char **argv)
 			{"obj-var", required_argument, NULL, 'o'},
 			{"quote-strings", no_argument, NULL, 'q'},
 			{"short-version", no_argument, NULL, 'v'},
-			{"stdin", no_argument, NULL, 'i'},
 			{"type-var", required_argument, NULL, 't'},
 			{"unset-vars", no_argument, NULL, 'u'},
 			{"version", no_argument, NULL, 'V'},
 			{0, 0, 0, 0}
 		};
 		opterr = 0;
-		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:ilo:qt:uv", longopts, &currentoption)) )
+		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:lo:qt:uv", longopts, &currentoption)) )
 		{
 			switch(currentoption)
 			{
@@ -131,8 +129,9 @@ int main(int argc, char **argv)
 				puts(
 					"Typical usage: . <(jkparse [OPTIONS...] [JSON])\n"
 					"  Parse JSON and return shell code for variable initialization based on the\n"
-					"JSON contents.  The returned shell code can be processed by bash v4+, ksh93,\n"
-					"or zsh v5.5+.  Two variable declarations are output:\n"
+					"JSON contents.  This will read the JSON to parse either from an argument or, if\n"
+					"that is not present, from stdin.  The returned shell code can be processed by\n"
+					"bash v4+, ksh93, or zsh v5.5+.  Two variable declarations are output:\n"
 					"  JSON_TYPE - this is a single character describing the detected type of the\n"
 					"JSON argument.  This character is the first character for one of the following\n"
 					"types: null, boolean, int, double, string, array, or object.  The type will be\n"
@@ -152,6 +151,9 @@ int main(int argc, char **argv)
 					"  There is no special handling for duplicated keys in objects.  When there are\n"
 					"duplicate keys, multiple assignments will be output in the order that the keys\n"
 					"appear in the original JSON.\n"
+					"  This does not stream process the input when reading from stdin; if ever input\n"
+					"stream processing were implemented, this may output the variable declarations\n"
+					"twice.\n"
 					"\n"
 					"OPTIONS:\n"
 					" -a, --array-var=JSON_OBJ_TYPES\n"
@@ -166,11 +168,6 @@ int main(int argc, char **argv)
 					"  string to replace empty keys with.  The default is \"$'\\1'\".  This value\n"
 					"  must be suitable for shell use.  No verification or substitution in output is\n"
 					"  made for a non-empty value that is specified here.  An empty value is invalid\n"
-					" -i, --stdin\n"
-					"    Read JSON from stdin rather than from an argument.  This permits larger\n"
-					"  JSON objects to be input.  This does not stream process the input; if ever\n"
-					"  input stream processing were implemented, this may output the variable\n"
-					"  declarations twice\n"
 					" -l, --local-declarations\n"
 					"    Declare variables using the local keyword rather than the default, typeset\n"
 					" -o, --obj-var=JSON_OBJ\n"
@@ -194,7 +191,7 @@ int main(int argc, char **argv)
 					" --version\n"
 					"    Output version, copyright, and build options, then exit\n"
 					"  Any non-empty variable name specified via an option will appear verbatim in\n"
-					"the output without additional verification.\n"
+					"the output without additional verification."
 				);
 				return EXIT_SUCCESS;
 			case 'a':
@@ -206,9 +203,6 @@ int main(int argc, char **argv)
 					fprintf(stderr, "An empty argument for --empty-key is invalid\n");
 					return EX_USAGE;
 				}
-				break;
-			case 'i':
-				streamInput = 1;
 				break;
 			case 'l':
 				declareStr = "local";
@@ -262,18 +256,19 @@ int main(int argc, char **argv)
 		}
 	}
 	json_object * obj;
-	if(streamInput)
+	if(optind < argc)
 	{
+		//  The JSON object is an argument
+		obj = json_tokener_parse(argv[optind]);
+	}
+	else
+	{
+		//  Read the JSON object from stdin
 		char * input;
 		//  Not only is this inefficient with memory, there is no limit on size here...
 		scanf("%m[\x01-\xFF]", &input);
 		obj = json_tokener_parse(input);
 		free(input);
-	}
-	else
-	{
-		//  If the JSON argument is missing, treat it as a null object
-		obj = json_tokener_parse(optind >= argc ? "" : argv[optind]);
 	}
 	json_type type = json_object_get_type(obj);
 	if(0 == *objVarName)
