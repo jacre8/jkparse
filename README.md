@@ -18,8 +18,8 @@ alternative that can already generate associative arrays for ksh:
 may be preferable if strict bash or zsh compatibility is desired, if you
 need type detection, if you already have a json-c library dependency, or
 if it is desired to permit arbitrary characters in keys.  Conversely,
-jsoncvt has less dependencies and supports generating multidimensional
-arrays for ksh.  
+jsoncvt has less dependencies, has more human readable output, and
+supports generating multidimensional arrays for ksh.  
   
 Bare POSIX/ash shells are not intended targets for this implementation
 as there are alternatives that already work well within that constraint.
@@ -68,6 +68,11 @@ Exampe Use
 	  string to replace empty keys with.  The default is "$'\1'".  This value
 	  must be suitable for shell use.  No verification or substitution in output is
 	  made for a non-empty value that is specified here.  An empty value is invalid
+	 -i, --stdin
+	    Read JSON from stdin rather than from an argument.  This permits larger
+	  JSON objects to be input.  This does not stream process the input; if ever
+	  input stream processing were implemented, this may output the variable
+	  declarations twice
 	 -l, --local-declarations
 	    Declare variables using the local keyword rather than the default, typeset
 	 -o, --obj-var=JSON_OBJ
@@ -79,6 +84,11 @@ Exampe Use
 	 -t, --type-var=JSON_TYPE
 	    Specify a variable name for JSON_TYPE other than the default, JSON_TYPE.
 	  If blank, the type variable will be omitted from the output
+	 -u, --unset-vars
+	    Output commands to unset JSON_OBJ and, if defined, JSON_OBJ_TYPES, before
+	  outputting their new declarations.  This permits re-using the same variable
+	  names, and using JSON_OBJ for both input and output, while transversing an
+	  object
 	 -v, --short-version
 	    Output just the version number and exit
 	 --help
@@ -87,8 +97,8 @@ Exampe Use
 	    Output version, copyright, and build options, then exit
 	  Any non-empty variable name specified via an option will appear verbatim in
 	the output without additional verification.
-
-	$ . <(jkparse -a OBJ_TYPES '{"number":5, "need":"input", "end":null}'
+	
+	$ . <(jkparse -a OBJ_TYPES '{"number":5, "need":"input", "end":null}')
 	$ echo $JSON_TYPE
 	o
 	$ echo ${JSON_OBJ[number]}
@@ -99,22 +109,34 @@ Exampe Use
 	input
 	$ echo ${OBJ_TYPES[end]}
 	n
-
+	
 	$ printf '["string", "with\na newline", 5]' > /tmp/jarray
 	$ . <(jkparse -q "$(< /tmp/jarray)")
+	$ # This would also work: . <(jkparse -qi < /tmp/jarray)
 	$ echo $JSON_TYPE
 	a
-	$ echo "${JSON_OBJ[1]}" # assuming bash/ksh here for the index value
+	$ echo "${JSON_OBJ[1]}" # assuming ksh indexing...
 	"with
 	a newline"
 	
-	$ jkparse -o '$OBJ' -t '$TYPE' 42
-	typeset $TYPE=i
-	typeset $OBJ=42
+	$ echo 42 | jkparse -io '$OBJ' -t '$TYPE'
+	typeset $TYPE=i;typeset $OBJ=42
 	
 	$ jkparse -l {23:}
-	local JSON_TYPE=n
-	local JSON_OBJ=
+	local JSON_TYPE=n;local JSON_OBJ=
+	
+	$ eval "$(jkparse -q '{"inventory":[{"container":{"type":"can",
+	"label":"beans","weight":12.7}},{"container":{"type":"bag",
+	"label":null,"weight":2.3}}],"leftHand":"flashlight"}')"
+	$ . <(jkparse -qu "${JSON_OBJ[inventory]}")
+	$ . <(jkparse -qu "${JSON_OBJ[1]}") // Assuming ksh indexing...
+	$ . <(jkparse -ua OBJ_TYPES "${JSON_OBJ[container]}")
+	$ echo ${JSON_TYPE}
+	o
+	$ echo ${OBJ_TYPES[weight]}
+	d
+	$ echo ${JSON_OBJ[type]}
+	bag
 
 
 Building and Installing
@@ -146,6 +168,7 @@ root.  The default install target places it in /usr/local/bin:
 Alternatives
 ------------
 
+JSON parsers for shell use:  
 [jsoncvt](https://github.com/krz8/jsoncvt)  
 [jq](https://stedolan.github.io/jq/)  
 [jshon](http://kmkeen.com/jshon/)  
@@ -154,5 +177,9 @@ Alternatives
 [TickTick](https://github.com/kristopolous/TickTick)  
 [libshell](https://github.com/legionus/libshell)  
 [posix-awk-shell-jq](https://github.com/vcheckzen/posix-awk-shell-jq)  
-[json-to-sh](https://github.com/mlvzk/json-to-sh)
-[jwalk](https://github.com/shellbound/jwalk/)
+[json-to-sh](https://github.com/mlvzk/json-to-sh)  
+[jwalk](https://github.com/shellbound/jwalk/)  
+  
+JSON generators for shell use:  
+[jo](https://github.com/jpmens/jo)  
+[json_pp](https://github.com/deftek/json_pp)

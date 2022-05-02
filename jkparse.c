@@ -3,13 +3,14 @@
 // similar shells.
 //  Copyright (C) 2022 Jason Hinsch
 //  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
+//  See https://github.com/jacre8/jkparse for the latest version and documentation
 
-#define JKPRINT_VERSION_STRING "2.2"
+#define JKPRINT_VERSION_STRING "3"
 
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
 // printf, declare USE_SHELL_PRINTF with the path to the shell as a constant string.
-// E.g: gcc -D USE_SHELL_PRINTF=/bin/ksh -O2 -o jkparse jkparse.c -ljson-c
+// E.g: gcc -D 'USE_SHELL_PRINTF="/bin/ksh"' -O2 -o jkparse jkparse.c -ljson-c
 
 #ifdef USE_SHELL_PRINTF
 	#ifndef SHELL_BASENAME
@@ -101,6 +102,8 @@ int main(int argc, char **argv)
 	char *emptyKey = "$'\\1'";
 	const char * declareStr = "typeset";
 	int quoteStrings = 0;
+	int streamInput = 0;
+	int unsetVars = 0;
 	__fsetlocking(stdout, FSETLOCKING_BYCALLER);
 	{
 		int currentoption;
@@ -113,12 +116,14 @@ int main(int argc, char **argv)
 			{"obj-var", required_argument, NULL, 'o'},
 			{"quote-strings", no_argument, NULL, 'q'},
 			{"short-version", no_argument, NULL, 'v'},
+			{"stdin", no_argument, NULL, 'i'},
 			{"type-var", required_argument, NULL, 't'},
+			{"unset-vars", no_argument, NULL, 'u'},
 			{"version", no_argument, NULL, 'V'},
 			{0, 0, 0, 0}
 		};
 		opterr = 0;
-		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:lo:qt:v", longopts, &currentoption)) )
+		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:ilo:qt:uv", longopts, &currentoption)) )
 		{
 			switch(currentoption)
 			{
@@ -161,6 +166,11 @@ int main(int argc, char **argv)
 					"  string to replace empty keys with.  The default is \"$'\\1'\".  This value\n"
 					"  must be suitable for shell use.  No verification or substitution in output is\n"
 					"  made for a non-empty value that is specified here.  An empty value is invalid\n"
+					" -i, --stdin\n"
+					"    Read JSON from stdin rather than from an argument.  This permits larger\n"
+					"  JSON objects to be input.  This does not stream process the input; if ever\n"
+					"  input stream processing were implemented, this may output the variable\n"
+					"  declarations twice\n"
 					" -l, --local-declarations\n"
 					"    Declare variables using the local keyword rather than the default, typeset\n"
 					" -o, --obj-var=JSON_OBJ\n"
@@ -172,6 +182,11 @@ int main(int argc, char **argv)
 					" -t, --type-var=JSON_TYPE\n"
 					"    Specify a variable name for JSON_TYPE other than the default, JSON_TYPE.\n"
 					"  If blank, the type variable will be omitted from the output\n"
+					" -u, --unset-vars\n"
+					"    Output commands to unset JSON_OBJ and, if defined, JSON_OBJ_TYPES, before\n"
+					"  outputting their new declarations.  This permits re-using the same variable\n"
+					"  names, and using JSON_OBJ for both input and output, while transversing an\n"
+					"  object\n"
 					" -v, --short-version\n"
 					"    Output just the version number and exit\n"
 					" --help\n"
@@ -192,6 +207,9 @@ int main(int argc, char **argv)
 					return EX_USAGE;
 				}
 				break;
+			case 'i':
+				streamInput = 1;
+				break;
 			case 'l':
 				declareStr = "local";
 				break;
@@ -204,6 +222,9 @@ int main(int argc, char **argv)
 			case 't':
 				typeVarName = optarg;
 				break;
+			case 'u':
+				unsetVars = 1;
+				break;
 			case 'v':
 				fputs_unlocked(JKPRINT_VERSION_STRING "\n", stdout);
 				return EXIT_SUCCESS;
@@ -212,6 +233,7 @@ int main(int argc, char **argv)
 				fputs_unlocked("jkparse version " JKPRINT_VERSION_STRING
 					"\nCopyright (C) 2022 Jason Hinsch\n"
 					"License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n"
+					"See https://github.com/jacre8/jkparse for the latest version and documentation\n"
 					"Compiled with:\n"
 					#ifndef USE_SHELL_PRINTF
 						" PRINTF_EXECUTABLE=\"" PRINTF_EXECUTABLE "\"\n"
@@ -239,8 +261,20 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	//  If the JSON argument is missing, treat it as a null object
-	json_object * obj = json_tokener_parse(optind >= argc ? "" : argv[optind]);
+	json_object * obj;
+	if(streamInput)
+	{
+		char * input;
+		//  Not only is this inefficient with memory, there is no limit on size here...
+		scanf("%m[\x01-\xFF]", &input);
+		obj = json_tokener_parse(input);
+		free(input);
+	}
+	else
+	{
+		//  If the JSON argument is missing, treat it as a null object
+		obj = json_tokener_parse(optind >= argc ? "" : argv[optind]);
+	}
 	json_type type = json_object_get_type(obj);
 	if(0 == *objVarName)
 	{
@@ -254,12 +288,12 @@ int main(int argc, char **argv)
 	static const char * arrayDeclareType = "-a ";
 	void printTypeAndBeginObjWithType(const char * declareType)
 	{
-		static const char * printTemplate = "%s %s=%c\n%s %s%s=";
+		//  Include a ';' between commands so that this can also be used with eval
 		if(*typeVarName)
-			printf(printTemplate, declareStr, typeVarName, *json_type_to_name(type),
-				declareStr, declareType, objVarName);
-		else
-			printf(printTemplate + 9, declareStr, declareType, objVarName);
+			printf("%s %s=%c;", declareStr, typeVarName, *json_type_to_name(type));
+		if(unsetVars)
+			printf("unset %s;", objVarName);
+		printf("%s %s%s=", declareStr, declareType, objVarName);
 	}
 	void printTypeAndBeginObj(void)
 	{
@@ -267,7 +301,11 @@ int main(int argc, char **argv)
 	}
 	void printArrayClosureAndBeginArrayVar(const char * declareType)
 	{
-		printf(")\n%s %s%s=(", declareStr, declareType, arrayVarName);
+		//  Include a ';' between commands so that this can also be used with eval
+		fputs_unlocked(");", stdout);
+		if(unsetVars)
+			printf("unset %s;", arrayVarName);
+		printf("%s %s%s=(", declareStr, declareType, arrayVarName);
 	}
 	void printObject(void (*valuePrintFunction)(json_object *))
 	{
