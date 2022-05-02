@@ -178,6 +178,7 @@ JSON parsers for shell use:
 [posix-awk-shell-jq](https://github.com/vcheckzen/posix-awk-shell-jq)  
 [json-to-sh](https://github.com/mlvzk/json-to-sh)  
 [jwalk](https://github.com/shellbound/jwalk/)  
+[jsawk](https://github.com/micha/jsawk)  
   
 JSON generators for shell use:  
 [jo](https://github.com/jpmens/jo)  
