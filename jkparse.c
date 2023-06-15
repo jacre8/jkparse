@@ -1,11 +1,12 @@
 //  jkparse
 //  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
 // similar shells.
-//  Copyright (C) 2022 Jason Hinsch
-//  License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
-//  See https://github.com/jacre8/jkparse for the latest version and documentation
 
-#define JKPRINT_VERSION_STRING "4"
+#define JKPRINT_VERSION_STRING "5"
+#define JKPRINT_VERSION_STRING_LONG "jkparse version " JKPRINT_VERSION_STRING \
+"\nCopyright (C) 2022-2023 Jason Hinsch\n" \
+"License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n" \
+"See https://github.com/jacre8/jkparse for the latest version and documentation\n"
 
 //  Compile with: gcc -O2 -o jkparse jkparse.c -ljson-c
 //  If it is desired to use a shell's builtin printf rather than coreutils' or another standalone
@@ -22,7 +23,7 @@
 #endif
 //#define TRIM_ARRAY_LEADING_SPACE  // for vanity's sake
 //  At least as early as zsh v5.7.1, the workarounds with the following option are uneceesary.
-// These issues may even have been fixed by v5.5.
+// These issues may even have been fixed by v5.5.  These issues were observed in v5.3.1.
 //#define WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
 
 #define _GNU_SOURCE // for fputs_unlocked
@@ -40,6 +41,7 @@
 #include <stdio.h>
 #include <stdio_ext.h> // __fsetlocking()
 #include <stdlib.h>
+#include <string.h>
 #include <sysexits.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -72,18 +74,53 @@ static void putShEscapedString(const char * str)
 }
 
 
-
-static void putQuotedString(const char * str)
+static void putJsonEscapedString(void (* putf)(const char *), const char * str,
+	int withSurroundingQuotes)
 {
-	fputs_unlocked("\\\"", stdout);
-	putShEscapedString(str);
-	fputs_unlocked("\\\"", stdout);
+	//  For proper JSON formatting, use the json-c library to escape the string's characters.  To
+	// get the library to do this, add it to a json array object and remove the array formatting.
+	int paddingOffset = 1 + (! withSurroundingQuotes);
+	json_object *jarray = json_object_new_array();
+	json_object_array_add(jarray, json_object_new_string(str));
+	//  json_object_to_json_string_ext(jarray, JSON_C_TO_STRING_PLAIN) will return the string
+	// as '["str"]'.
+	//  json_object_to_json_string_length() is only present in json-c v0.13, or newer.  The
+	// JSON_C_TO_STRING_PRETTY_TAB macro was also introduced in v0.13.
+	#ifdef JSON_C_TO_STRING_PRETTY_TAB
+		size_t termCharIndex;
+		char * arrayedStr = (char *)json_object_to_json_string_length(jarray,
+			JSON_C_TO_STRING_PLAIN, &termCharIndex);
+		termCharIndex -= paddingOffset;
+	#else
+		char * arrayedStr = (char *)json_object_to_json_string_ext(jarray, JSON_C_TO_STRING_PLAIN);
+		size_t termCharIndex = strlen(arrayedStr) - paddingOffset;
+	#endif
+	// The leading '[' is easily accounted for, but we must come back and strip the trailing ']'.
+	// Albeit bad form, it does work to terminate it in place rather than copy the whole string.
+	arrayedStr[termCharIndex] = 0;
+	putf(arrayedStr + paddingOffset);
+	//  To avoid potential issues without making assumptions about json-c's implementation,
+	// put the trailing ']' back before freeing jarray
+	arrayedStr[termCharIndex] = ']';
+	json_object_put(jarray);
 }
 
 
+static void putShEscapedAndQuotedJsonString(const char * str)
+{
+	putJsonEscapedString(putShEscapedString, str, 1);
+}
+
+
+//  For use with putJsonEscapedString()
+static void stdPutf(const char * str)
+{
+	fputs_unlocked(str, stdout);
+}
+
 static void valPrintWithQuotedStrings(json_object * val)
 {
-	(json_type_string == json_object_get_type(val) ? putQuotedString :
+	(json_type_string == json_object_get_type(val) ? putShEscapedAndQuotedJsonString :
 		putShEscapedString)(json_object_get_string(val));
 }
 
@@ -103,6 +140,7 @@ int main(int argc, char **argv)
 	const char * declareStr = "typeset";
 	int quoteStrings = 0;
 	int unsetVars = 0;
+	int stringify = 0;
 	__fsetlocking(stdout, FSETLOCKING_BYCALLER);
 	{
 		int currentoption;
@@ -115,13 +153,14 @@ int main(int argc, char **argv)
 			{"obj-var", required_argument, NULL, 'o'},
 			{"quote-strings", no_argument, NULL, 'q'},
 			{"short-version", no_argument, NULL, 'v'},
+			{"stringify", no_argument, NULL, 's'},
 			{"type-var", required_argument, NULL, 't'},
 			{"unset-vars", no_argument, NULL, 'u'},
 			{"version", no_argument, NULL, 'V'},
 			{0, 0, 0, 0}
 		};
 		opterr = 0;
-		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:lo:qt:uv", longopts, &currentoption)) )
+		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:lo:qst:uv", longopts, &currentoption)) )
 		{
 			switch(currentoption)
 			{
@@ -129,9 +168,10 @@ int main(int argc, char **argv)
 				puts(
 					"Typical usage: . <(jkparse [OPTIONS...] [JSON])\n"
 					"  Parse JSON and return shell code for variable initialization based on the\n"
-					"JSON contents.  This will read the JSON to parse either from an argument or, if\n"
-					"that is not present, from stdin.  The returned shell code can be processed by\n"
-					"bash v4+, ksh93, or zsh v5.5+.  Two variable declarations are output:\n"
+					"JSON contents.  This will read the JSON to parse either from the first non-\n"
+					"option argument or, if one is not present, from stdin.  The returned shell code\n"
+					"can be processed by bash v4+, ksh93, or zsh v5.5+.  Two variable declarations\n"
+					"are output:\n"
 					"  JSON_TYPE - this is a single character describing the detected type of the\n"
 					"JSON argument.  This character is the first character for one of the following\n"
 					"types: null, boolean, int, double, string, array, or object.  The type will be\n"
@@ -174,8 +214,15 @@ int main(int argc, char **argv)
 					"    Specify a variable name for JSON_OBJ other than the default, JSON_OBJ.\n"
 					"  If blank, the object and array variables will be omitted from the output\n"
 					" -q, --quote-strings\n"
-					"    Include quotations around output string values so that they can be fed back\n"
-					"  through this program with corresponding type detection\n"
+					"    Include quotations around output string values, and escape as necessary to,\n"
+					"  generate valid JSON, so that they can be fed back through this program with\n"
+					"  corresponding type detection\n"
+					" -s, --stringify\n"
+					"    Take the input and output it escaped as a JSON string, without surrounding\n"
+					"  quotes, whitespace, or shell escapes.  This is a formatting-only function\n"
+					"  that is intended for use in constructing JSON text.  The only other option\n"
+					"  that this may be logically combined with is -q, which only adds surrounding\n"
+					"  quotes in the output when combined\n"
 					" -t, --type-var=JSON_TYPE\n"
 					"    Specify a variable name for JSON_TYPE other than the default, JSON_TYPE.\n"
 					"  If blank, the type variable will be omitted from the output\n"
@@ -191,7 +238,9 @@ int main(int argc, char **argv)
 					" --version\n"
 					"    Output version, copyright, and build options, then exit\n"
 					"  Any non-empty variable name specified via an option will appear verbatim in\n"
-					"the output without additional verification."
+					"the output without additional verification.  Additional options for variable\n"
+					"declaration may be specified in the -a, -o, and -t option arguments.  E.g.,\n"
+					"-o '-g JSON_OBJ' will promote the scope of the object's declaration in BASH."
 				);
 				return EXIT_SUCCESS;
 			case 'a':
@@ -216,6 +265,9 @@ int main(int argc, char **argv)
 			case 't':
 				typeVarName = optarg;
 				break;
+			case 's':
+				stringify = 1;
+				break;
 			case 'u':
 				unsetVars = 1;
 				break;
@@ -224,10 +276,7 @@ int main(int argc, char **argv)
 				return EXIT_SUCCESS;
 				break;
 			case 'V':
-				fputs_unlocked("jkparse version " JKPRINT_VERSION_STRING
-					"\nCopyright (C) 2022 Jason Hinsch\n"
-					"License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n"
-					"See https://github.com/jacre8/jkparse for the latest version and documentation\n"
+				fputs_unlocked(JKPRINT_VERSION_STRING_LONG
 					"Compiled with:\n"
 					#ifndef USE_SHELL_PRINTF
 						" PRINTF_EXECUTABLE=\"" PRINTF_EXECUTABLE "\"\n"
@@ -254,6 +303,16 @@ int main(int argc, char **argv)
 				return EX_USAGE;
 			}
 		}
+	}
+	if(stringify)
+	{
+		char * input;
+		if(optind < argc)
+			input = argv[optind];
+		else
+			scanf("%m[\x01-\xFF]", &input);
+		putJsonEscapedString(stdPutf, input, quoteStrings);
+		return 0;
 	}
 	json_object * obj;
 	if(optind < argc)
@@ -465,7 +524,8 @@ int main(int argc, char **argv)
 		break;
 	case json_type_string:
 		printTypeAndBeginObj();
-		(quoteStrings ? putQuotedString : putShEscapedString)(json_object_get_string(obj));
+		(quoteStrings ? putShEscapedAndQuotedJsonString :
+			putShEscapedString)(json_object_get_string(obj));
 		putc_unlocked('\n', stdout);
 		break;
 	}

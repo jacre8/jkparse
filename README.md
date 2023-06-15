@@ -9,22 +9,14 @@ Uses the [json-c](https://github.com/json-c/json-c/wiki) library.
 Why another JSON parser?
 ------------------------
 
-An associative array seems like the most natural approach for
-transversing a JSON object in a shell script.  I could not find a parser
-intended for shell use that easily exports a JSON object to a shell
-array, so I set about creating one.  I later found a pre-existing
-alternative that can already generate associative arrays for ksh: 
-[jsoncvt](https://github.com/krz8/jsoncvt).  Relative to that, this one
-may be preferable if strict bash or zsh compatibility is desired, if you
-need type detection, if you already have a json-c library dependency, or
-if it is desired to permit arbitrary characters in keys.  Conversely,
-jsoncvt has less dependencies, has more human readable output, and
-supports generating multidimensional arrays for ksh.  
+An associative array seems like the most natural approach for transversing
+a JSON object in a shell script.  Relative to alternatives, this
+implementation offers strict bash and zsh compatibility, a simple interface,
+strong type detection, and permits arbitrary characters in keys.
   
-Bare POSIX/ash shells are not intended targets for this implementation
-as there are alternatives that already work well within that constraint.
-This utilizes gcc and glibc extensions which are not universally
-recognized.  
+Bare POSIX/ash shells are not targeted by this implementation; there
+are alternatives that already work well within that constraint.  This
+utilizes gcc and glibc extensions which are not universally recognized.
 
 
 Exampe Use
@@ -33,9 +25,10 @@ Exampe Use
 	$ jkparse --help
 	Typical usage: . <(jkparse [OPTIONS...] [JSON])
 	  Parse JSON and return shell code for variable initialization based on the
-	JSON contents.  This will read the JSON to parse either from an argument or, if
-	that is not present, from stdin.  The returned shell code can be processed by
-	bash v4+, ksh93, or zsh v5.5+.  Two variable declarations are output:
+	JSON contents.  This will read the JSON to parse either from the first non-
+	option argument or, if one is not present, from stdin.  The returned shell code
+	can be processed by bash v4+, ksh93, or zsh v5.5+.  Two variable declarations
+	are output:
 	  JSON_TYPE - this is a single character describing the detected type of the
 	JSON argument.  This character is the first character for one of the following
 	types: null, boolean, int, double, string, array, or object.  The type will be
@@ -78,8 +71,15 @@ Exampe Use
 	    Specify a variable name for JSON_OBJ other than the default, JSON_OBJ.
 	  If blank, the object and array variables will be omitted from the output
 	 -q, --quote-strings
-	    Include quotations around output string values so that they can be fed back
-	  through this program with corresponding type detection
+	    Include quotations around output string values, and escape as necessary to,
+	  generate valid JSON, so that they can be fed back through this program with
+	  corresponding type detection
+	 -s, --stringify
+	    Take the input and output it escaped as a JSON string, without surrounding
+	  quotes, whitespace, or shell escapes.  This is a formatting-only function
+	  that is intended for use in constructing JSON text.  The only other option
+	  that this may be logically combined with is -q, which only adds surrounding
+	  quotes in the output when combined
 	 -t, --type-var=JSON_TYPE
 	    Specify a variable name for JSON_TYPE other than the default, JSON_TYPE.
 	  If blank, the type variable will be omitted from the output
@@ -95,7 +95,9 @@ Exampe Use
 	 --version
 	    Output version, copyright, and build options, then exit
 	  Any non-empty variable name specified via an option will appear verbatim in
-	the output without additional verification.
+	the output without additional verification.  Additional options for variable
+	declaration may be specified in the -a, -o, and -t option arguments.  E.g.,
+	-o '-g JSON_OBJ' will promote the scope of the object's declaration in BASH.
 	
 	$ . <(jkparse -a OBJ_TYPES '{"number":5, "need":"input", "end":null}')
 	$ echo $JSON_TYPE
@@ -167,14 +169,17 @@ root.  The default install target places it in /usr/local/bin:
 Alternatives
 ------------
 
-JSON parsers for shell use:  
-[jsoncvt](https://github.com/krz8/jsoncvt)  
-[jq](https://stedolan.github.io/jq/)  
+JSON parsers for shell use (some of these, like jq, generate JSON as well):  
+[jsoncvt](https://github.com/krz8/jsoncvt) can also directly output a
+ksh associative array.  It has less dependencies, human readable output,
+and supports generating multidimensional arrays.  
+[jq](https://stedolan.github.io/jq/), a de-facto standard.  
 [jshon](http://kmkeen.com/jshon/)  
 [JSON.sh](https://github.com/dominictarr/JSON.sh)  
 [json.sh](https://github.com/rcrowley/json.sh)  
 [TickTick](https://github.com/kristopolous/TickTick)  
-[libshell](https://github.com/legionus/libshell)  
+[libshell](https://github.com/legionus/libshell) has a lot of capabilities,
+including JSON parsing.  
 [posix-awk-shell-jq](https://github.com/vcheckzen/posix-awk-shell-jq)  
 [json-to-sh](https://github.com/mlvzk/json-to-sh)  
 [jwalk](https://github.com/shellbound/jwalk/)  
