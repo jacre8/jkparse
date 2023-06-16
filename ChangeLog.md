@@ -1,4 +1,4 @@
-5 - 2023-05-01
+5 - 2023-06-15
 ==============
 
 - Bugfix: appropriate JSON escape sequences are now included in strings output with the -q / --quote-strings option
