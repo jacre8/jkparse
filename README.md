@@ -73,7 +73,8 @@ Exampe Use
 	 -q, --quote-strings
 	    Include quotations around output string values, and escape as necessary to
 	  generate valid JSON, so that they can be fed back through this program with
-	  corresponding type detection
+	  corresponding type detection.  For the sake of subsequent encoding, the type
+	  indicator for strings will be 'q' with this option instead of 's'
 	 -s, --stringify
 	    Take the input and output it escaped as a JSON string, without surrounding
 	  quotes, whitespace, or shell escapes.  This is a formatting-only function

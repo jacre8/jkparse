@@ -2,7 +2,7 @@
 //  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
 // similar shells.
 
-#define JKPRINT_VERSION_STRING "5"
+#define JKPRINT_VERSION_STRING "6"
 #define JKPRINT_VERSION_STRING_LONG "jkparse version " JKPRINT_VERSION_STRING \
 "\nCopyright (C) 2022-2023 Jason Hinsch\n" \
 "License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n" \
@@ -216,7 +216,8 @@ int main(int argc, char **argv)
 					" -q, --quote-strings\n"
 					"    Include quotations around output string values, and escape as necessary to\n"
 					"  generate valid JSON, so that they can be fed back through this program with\n"
-					"  corresponding type detection\n"
+					"  corresponding type detection.  For the sake of subsequent encoding, the type\n"
+					"  indicator for strings will be 'q' with this option instead of 's'\n"
 					" -s, --stringify\n"
 					"    Take the input and output it escaped as a JSON string, without surrounding\n"
 					"  quotes, whitespace, or shell escapes.  This is a formatting-only function\n"
@@ -334,17 +335,20 @@ int main(int argc, char **argv)
 	{
 		if(*typeVarName)
 		{
-			printf("%s %s=%c\n", declareStr, typeVarName, *json_type_to_name(type));
+			char typeChar = *json_type_to_name(type);
+			printf("%s %s=%c\n", declareStr, typeVarName,
+				's' == typeChar && quoteStrings ? 'q' : typeChar);
 		}
 		return 0;
 	}
 	static const char * associativeDeclareType = "-A ";
 	static const char * arrayDeclareType = "-a ";
+	char objTypeChar;
 	void printTypeAndBeginObjWithType(const char * declareType)
 	{
 		//  Include a ';' between commands so that this can also be used with eval
 		if(*typeVarName)
-			printf("%s %s=%c;", declareStr, typeVarName, *json_type_to_name(type));
+			printf("%s %s=%c;", declareStr, typeVarName, objTypeChar);
 		if(unsetVars)
 			printf("unset %s;", objVarName);
 		printf("%s %s%s=", declareStr, declareType, objVarName);
@@ -461,16 +465,25 @@ int main(int argc, char **argv)
 	switch(type)
 	{
 	case json_type_null: // (i.e. obj == NULL),
+		objTypeChar = 'n';
 		printTypeAndBeginObj();
 		putc_unlocked('\n', stdout);
 		break;
 	case json_type_boolean:
+		objTypeChar = 'b';
+		goto outputObjPlainly;
 	case json_type_double:
+		objTypeChar = 'd';
+		goto outputObjPlainly;
 	case json_type_int:
+		objTypeChar = 'i';
+	outputObjPlainly:
+		//objTypeChar = *json_type_to_name(type);
 		printTypeAndBeginObj();
 		puts(json_object_get_string(obj));
 		break;
 	case json_type_object:
+		objTypeChar = 'o';
 		printTypeAndBeginObjWithType(associativeDeclareType);
 		putc_unlocked('(', stdout);
 		{
@@ -482,12 +495,18 @@ int main(int argc, char **argv)
 			{
 				putc_unlocked(*json_type_to_name(json_object_get_type(val)), stdout);
 			}
+			void valTypePrintWithQForStrings(json_object * val)
+			{
+				char typeChar = *json_type_to_name(json_object_get_type(val));
+				putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
+			}
 			printArrayClosureAndBeginArrayVar(associativeDeclareType);
-			printObject(valTypePrint);
+			printObject(quoteStrings ? valTypePrintWithQForStrings : valTypePrint);
 		}
 		puts(")");
 		break;
 	case json_type_array:
+		objTypeChar = 'a';
 		printTypeAndBeginObjWithType(arrayDeclareType);
 		putc_unlocked('(', stdout);
 		{
@@ -509,23 +528,48 @@ int main(int argc, char **argv)
 			if(*arrayVarName)
 			{
 				printArrayClosureAndBeginArrayVar(arrayDeclareType);
-				for(int index = 0; index < arrayLength; index++)
+				if(quoteStrings)
 				{
-				#ifdef TRIM_ARRAY_LEADING_SPACE
-					if(index)
-				#endif
-						putc_unlocked(' ', stdout);
-					putc_unlocked(*json_type_to_name(json_object_get_type(
-						json_object_array_get_idx(obj, index))), stdout);
+					for(int index = 0; index < arrayLength; index++)
+					{
+					#ifdef TRIM_ARRAY_LEADING_SPACE
+						if(index)
+					#endif
+							putc_unlocked(' ', stdout);
+						putc_unlocked(*json_type_to_name(json_object_get_type(
+							json_object_array_get_idx(obj, index))), stdout);
+					}
+				}
+				else
+				{
+					for(int index = 0; index < arrayLength; index++)
+					{
+					#ifdef TRIM_ARRAY_LEADING_SPACE
+						if(index)
+					#endif
+							putc_unlocked(' ', stdout);
+						char typeChar = *json_type_to_name(json_object_get_type(
+							json_object_array_get_idx(obj, index)));
+						putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
+					}
 				}
 			}
 		}
 		puts(")");
 		break;
 	case json_type_string:
-		printTypeAndBeginObj();
-		(quoteStrings ? putShEscapedAndQuotedJsonString :
-			putShEscapedString)(json_object_get_string(obj));
+		(
+			quoteStrings ?
+			({
+				objTypeChar = 'q';
+				printTypeAndBeginObj();
+				putShEscapedAndQuotedJsonString;
+			}) : ({
+				objTypeChar = 's';
+				printTypeAndBeginObj();
+				putShEscapedString;
+			})
+		)(json_object_get_string(obj));
 		putc_unlocked('\n', stdout);
 		break;
 	}
