@@ -71,7 +71,7 @@ Exampe Use
 	    Specify a variable name for JSON_OBJ other than the default, JSON_OBJ.
 	  If blank, the object and array variables will be omitted from the output
 	 -q, --quote-strings
-	    Include quotations around output string values, and escape as necessary to,
+	    Include quotations around output string values, and escape as necessary to
 	  generate valid JSON, so that they can be fed back through this program with
 	  corresponding type detection
 	 -s, --stringify
