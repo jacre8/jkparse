@@ -214,7 +214,7 @@ int main(int argc, char **argv)
 					"    Specify a variable name for JSON_OBJ other than the default, JSON_OBJ.\n"
 					"  If blank, the object and array variables will be omitted from the output\n"
 					" -q, --quote-strings\n"
-					"    Include quotations around output string values, and escape as necessary to,\n"
+					"    Include quotations around output string values, and escape as necessary to\n"
 					"  generate valid JSON, so that they can be fed back through this program with\n"
 					"  corresponding type detection\n"
 					" -s, --stringify\n"
