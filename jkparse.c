@@ -536,8 +536,9 @@ int main(int argc, char **argv)
 						if(index)
 					#endif
 							putc_unlocked(' ', stdout);
-						putc_unlocked(*json_type_to_name(json_object_get_type(
-							json_object_array_get_idx(obj, index))), stdout);
+						char typeChar = *json_type_to_name(json_object_get_type(
+							json_object_array_get_idx(obj, index)));
+						putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
 					}
 				}
 				else
@@ -548,9 +549,8 @@ int main(int argc, char **argv)
 						if(index)
 					#endif
 							putc_unlocked(' ', stdout);
-						char typeChar = *json_type_to_name(json_object_get_type(
-							json_object_array_get_idx(obj, index)));
-						putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
+						putc_unlocked(*json_type_to_name(json_object_get_type(
+							json_object_array_get_idx(obj, index))), stdout);
 					}
 				}
 			}
