@@ -1,3 +1,16 @@
+7 - 2023-06-18
+==============
+
+- Bugfix: newline characters are no longer escaped in associative array key values
+- Added parse error reporting, both in the program's return code and more descriptively via the
+new --verbose option
+- The --quote-strings option will now also result in null object values being output as the string,
+null, rather than as empty strings
+- The jkparseArrayToJson() and jkparseObjToJson() functions in jkparseOutputToJson.sh now properly
+format null values
+- The jkparseObjToJson() shell function now properly encodes key values as JSON strings
+
+
 6 - 2023-06-16
 ==============
 
@@ -14,7 +27,8 @@ was broken in older versions (before yesteday) anyway.
 - Bugfix: appropriate JSON escape sequences are now included in strings output with the
 -q / --quote-strings option
 - Added the -s / --stringify option to aide in generating JSON
-- Added a note in the online help about how BASH's -g declaration option may be included in the output
+- Added a note in the online help about how BASH's -g declaration option may be included in the
+output
 
 
 4 - 2022-05-01
