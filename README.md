@@ -38,13 +38,13 @@ Exampe Use
 	 null - empty string
 	 boolean - string containing either 'true' or 'false'
 	 int, double - decimal string value
-	 string - string value without quotes
+	 string - string value without quotes or JSON escapes
 	 array - array containing a string representation of each member
 	 object - associative array containing a string representation of each member
-	  When JSON is either an array or an object type, non-string typed members of
-	the output array can be fed back through this program for further processing.
-	String typed members can also be fed back through if the --quote-strings option
-	is specified when the array is generated.
+	  Output values whose type is neither string nor null can always be fed back
+	through this program, without modification, for further processing.  String and
+	null typed output values can also be fed back through, without modification, if
+	the --quote-strings option is specified when the output is generated.
 	  There is no special handling for duplicated keys in objects.  When there are
 	duplicate keys, multiple assignments will be output in the order that the keys
 	appear in the original JSON.
@@ -74,7 +74,9 @@ Exampe Use
 	    Include quotations around output string values, and escape as necessary to
 	  generate valid JSON, so that they can be fed back through this program with
 	  corresponding type detection.  For the sake of subsequent encoding, the type
-	  indicator for strings will be 'q' with this option instead of 's'
+	  indicator for strings will be 'q' with this option instead of 's'.  With this
+	  option, null values will also be explictily output as null, rather than as
+	  empty strings
 	 -s, --stringify
 	    Take the input and output it escaped as a JSON string, without surrounding
 	  quotes, whitespace, or shell escapes.  This is a formatting-only function
@@ -91,6 +93,8 @@ Exampe Use
 	  object
 	 -v, --short-version
 	    Output just the version number and exit
+	 -V, --verbose
+	    If there is a parse error, output a descriptive message to stderr
 	 --help
 	    This help screen
 	 --version

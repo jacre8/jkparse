@@ -2,7 +2,7 @@
 //  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
 // similar shells.
 
-#define JKPRINT_VERSION_STRING "6"
+#define JKPRINT_VERSION_STRING "7"
 #define JKPRINT_VERSION_STRING_LONG "jkparse version " JKPRINT_VERSION_STRING \
 "\nCopyright (C) 2022-2023 Jason Hinsch\n" \
 "License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n" \
@@ -120,14 +120,18 @@ static void stdPutf(const char * str)
 
 static void valPrintWithQuotedStrings(json_object * val)
 {
-	(json_type_string == json_object_get_type(val) ? putShEscapedAndQuotedJsonString :
-		putShEscapedString)(json_object_get_string(val));
-}
-
-
-static void valPrintWithoutQuotedStrings(json_object * val)
-{
-	putShEscapedString(json_object_get_string(val));
+	if(val)
+		(json_type_string == json_object_get_type(val) ? putShEscapedAndQuotedJsonString :
+			putShEscapedString)(json_object_get_string(val));
+	else
+		fputs_unlocked("null", stdout);
+	/*enum json_type type = json_object_get_type(val);
+	if(json_type_null == type)
+		fputs_unlocked("null", stdout);
+	else
+		(json_type_string == type ? putShEscapedAndQuotedJsonString :
+			putShEscapedString)(json_object_get_string(val));
+	*/
 }
 
 
@@ -140,9 +144,10 @@ int main(int argc, char **argv)
 	const char * declareStr = "typeset";
 	int quoteStrings = 0;
 	int unsetVars = 0;
-	int stringify = 0;
+	int verbose = 0;
 	__fsetlocking(stdout, FSETLOCKING_BYCALLER);
 	{
+		int stringify = 0;
 		int currentoption;
 		static const struct option longopts[] = {
 			// {.name, .has_arg, .flag, .val}
@@ -156,11 +161,12 @@ int main(int argc, char **argv)
 			{"stringify", no_argument, NULL, 's'},
 			{"type-var", required_argument, NULL, 't'},
 			{"unset-vars", no_argument, NULL, 'u'},
-			{"version", no_argument, NULL, 'V'},
+			{"verbose", no_argument, NULL, 'V'},
+			{"version", no_argument, NULL, '@'},
 			{0, 0, 0, 0}
 		};
 		opterr = 0;
-		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:lo:qst:uv", longopts, &currentoption)) )
+		while( -1 != (currentoption = getopt_long(argc, argv, "a:e:lo:qst:uvV", longopts, &currentoption)) )
 		{
 			switch(currentoption)
 			{
@@ -181,13 +187,13 @@ int main(int argc, char **argv)
 					" null - empty string\n"
 					" boolean - string containing either 'true' or 'false'\n"
 					" int, double - decimal string value\n"
-					" string - string value without quotes\n"
+					" string - string value without quotes or JSON escapes\n"
 					" array - array containing a string representation of each member\n"
 					" object - associative array containing a string representation of each member\n"
-					"  When JSON is either an array or an object type, non-string typed members of\n"
-					"the output array can be fed back through this program for further processing.\n"
-					"String typed members can also be fed back through if the --quote-strings option\n"
-					"is specified when the array is generated.\n"
+					"  Output values whose type is neither string nor null can always be fed back\n"
+					"through this program, without modification, for further processing.  String and\n"
+					"null typed output values can also be fed back through, without modification, if\n"
+					"the --quote-strings option is specified when the output is generated.\n"
 					"  There is no special handling for duplicated keys in objects.  When there are\n"
 					"duplicate keys, multiple assignments will be output in the order that the keys\n"
 					"appear in the original JSON.\n"
@@ -217,7 +223,9 @@ int main(int argc, char **argv)
 					"    Include quotations around output string values, and escape as necessary to\n"
 					"  generate valid JSON, so that they can be fed back through this program with\n"
 					"  corresponding type detection.  For the sake of subsequent encoding, the type\n"
-					"  indicator for strings will be 'q' with this option instead of 's'\n"
+					"  indicator for strings will be 'q' with this option instead of 's'.  With this\n"
+					"  option, null values will also be explictily output as null, rather than as\n"
+					"  empty strings\n"
 					" -s, --stringify\n"
 					"    Take the input and output it escaped as a JSON string, without surrounding\n"
 					"  quotes, whitespace, or shell escapes.  This is a formatting-only function\n"
@@ -234,6 +242,8 @@ int main(int argc, char **argv)
 					"  object\n"
 					" -v, --short-version\n"
 					"    Output just the version number and exit\n"
+					" -V, --verbose\n"
+					"    If there is a parse error, output a descriptive message to stderr\n"
 					" --help\n"
 					"    This help screen\n"
 					" --version\n"
@@ -277,6 +287,9 @@ int main(int argc, char **argv)
 				return EXIT_SUCCESS;
 				break;
 			case 'V':
+				verbose = 1;
+				break;
+			case '@':
 				fputs_unlocked(JKPRINT_VERSION_STRING_LONG
 					"Compiled with:\n"
 					#ifndef USE_SHELL_PRINTF
@@ -304,32 +317,48 @@ int main(int argc, char **argv)
 				return EX_USAGE;
 			}
 		}
-	}
-	if(stringify)
-	{
-		char * input;
-		if(optind < argc)
-			input = argv[optind];
-		else
-			scanf("%m[\x01-\xFF]", &input);
-		putJsonEscapedString(stdPutf, input, quoteStrings);
-		return 0;
+		if(stringify)
+		{
+			char * input;
+			if(optind < argc)
+				input = argv[optind];
+			else
+				//  Not only is this inefficient with memory, there is no limit on size here...
+				scanf("%m[\x01-\xFF]", &input);
+			putJsonEscapedString(stdPutf, input, quoteStrings);
+			return 0;
+		}
 	}
 	json_object * obj;
+	enum json_tokener_error parseError = 0;
 	if(optind < argc)
 	{
 		//  The JSON object is an argument
-		obj = json_tokener_parse(argv[optind]);
+		//obj = json_tokener_parse(argv[optind]);
+		obj = json_tokener_parse_verbose(argv[optind], &parseError);
 	}
 	else
 	{
 		//  Read the JSON object from stdin
-		char * input;
-		//  Not only is this inefficient with memory, there is no limit on size here...
-		scanf("%m[\x01-\xFF]", &input);
-		obj = json_tokener_parse(input);
-		free(input);
+		struct json_tokener *tok = json_tokener_new();
+		if(! tok)
+			return EX_OSERR;
+		do
+		{
+			char inputBuffer[65536];
+			ssize_t readRc = read(0, inputBuffer, sizeof(inputBuffer));
+			if(0 >= readRc)
+			{
+				parseError = json_tokener_error_parse_eof;
+				break;
+			}
+			obj = json_tokener_parse_ex(tok, inputBuffer, readRc);
+		}
+		while(json_tokener_continue == (parseError = json_tokener_get_error(tok)));
+		json_tokener_free(tok);
 	}
+	if(parseError && verbose)
+		fprintf(stderr, "Error parsing JSON: %s\n", json_tokener_error_desc(parseError));
 	json_type type = json_object_get_type(obj);
 	if(0 == *objVarName)
 	{
@@ -397,7 +426,7 @@ int main(int argc, char **argv)
 						'<' != keyVal && '>' != keyVal && '|' != keyVal
 					) ? (
 						(
-							'\t' != keyVal && '\n' != keyVal && ' ' != keyVal && '!' != keyVal &&
+							'\t' != keyVal && ' ' != keyVal && '!' != keyVal &&
 							 '$' != keyVal && '(' != keyVal && ')' != keyVal &&
 							//  This range includes '\\'
 							('[' > keyVal || ']' < keyVal) && '`' != keyVal
@@ -426,7 +455,7 @@ int main(int argc, char **argv)
 			#else
 				while(
 					(
-						'\t' != keyVal && '\n' != keyVal &&
+						'\t' != keyVal &&
 						//  This range includes '!':
 						(' ' > keyVal || '"' < keyVal) &&
 						'$' != keyVal &&
@@ -467,7 +496,10 @@ int main(int argc, char **argv)
 	case json_type_null: // (i.e. obj == NULL),
 		objTypeChar = 'n';
 		printTypeAndBeginObj();
-		putc_unlocked('\n', stdout);
+		if(quoteStrings)
+			fputs_unlocked("null\n", stdout);
+		else
+			putc_unlocked('\n', stdout);
 		break;
 	case json_type_boolean:
 		objTypeChar = 'b';
@@ -487,6 +519,10 @@ int main(int argc, char **argv)
 		printTypeAndBeginObjWithType(associativeDeclareType);
 		putc_unlocked('(', stdout);
 		{
+			void valPrintWithoutQuotedStrings(json_object * val)
+			{
+				putShEscapedString(json_object_get_string(val));
+			}
 			printObject(quoteStrings ? valPrintWithQuotedStrings : valPrintWithoutQuotedStrings);
 		}
 		if(*arrayVarName)
@@ -510,8 +546,15 @@ int main(int argc, char **argv)
 		printTypeAndBeginObjWithType(arrayDeclareType);
 		putc_unlocked('(', stdout);
 		{
+			void arrayValPrintWithoutQuotedStrings(json_object * objAtIndex)
+			{
+				if(NULL == objAtIndex)
+					fputs_unlocked("''", stdout);
+				else
+					putShEscapedString(json_object_get_string(objAtIndex));
+			}
 			void (*valPrint)(json_object *) = quoteStrings
-				? valPrintWithQuotedStrings : valPrintWithoutQuotedStrings;
+				? valPrintWithQuotedStrings : arrayValPrintWithoutQuotedStrings;
 			int arrayLength = json_object_array_length(obj);
 			for(int index = 0; index < arrayLength; index++)
 			{
@@ -519,11 +562,7 @@ int main(int argc, char **argv)
 				if(index)
 			#endif
 					putc_unlocked(' ', stdout);
-				json_object * objAtIndex;
-				if(NULL == (objAtIndex = json_object_array_get_idx(obj, index)))
-					fputs_unlocked("''", stdout);
-				else
-					valPrint(objAtIndex);
+				valPrint(json_object_array_get_idx(obj, index));
 			}
 			if(*arrayVarName)
 			{
@@ -574,5 +613,5 @@ int main(int argc, char **argv)
 		break;
 	}
 	//json_object_put(obj);
-	return 0;
+	return parseError;
 }

@@ -18,11 +18,11 @@ function jkparseArrayToJson
 	for k$1$2 in \"\${!$1[@]}\";do
 		[ -z \"\$c$2$1\" ] || echo -n ,
 		c$2$1=1
-		if [ \"\${$2[\$k$1$2]}\" = s ];then
-			jkparse -qs \"\${$1[\$k$1$2]}\"
-		else
-			echo -n \"\${$1[\$k$1$2]}\"
-		fi
+		case \"\${$2[\$k$1$2]}\" in
+			s) jkparse -qs \"\${$1[\$k$1$2]}\";;
+			n) echo -n null;;
+			*) echo -n \"\${$1[\$k$1$2]}\";;
+		esac
 	done"
 	echo -n ]
 }
@@ -37,11 +37,11 @@ function jkparseContinuousArrayToJson
 	eval "typeset i$1$2=-1
 	while [ \$((++i$1$2)) -lt \${#$1[@]} ];do
 		[ \"\$i$1$2\" = 0 ] || echo -n ,
-		if [ \"\${$2[\$i$1$2]}\" = s ];then
-			jkparse -qs \"\${$1[\$i$1$2]}\"
-		else
-			echo -n \"\${$1[\$i$1$2]}\"
-		fi
+		case \"\${$2[\$i$1$2]}\" in
+			s) jkparse -qs \"\${$1[\$i$1$2]}\";;
+			n) echo -n null;;
+			*) echo -n \"\${$1[\$i$1$2]}\";;
+		esac
 	done"
 	echo -n ]
 }
@@ -59,12 +59,13 @@ function jkparseObjToJson
 	for k$1$2 in \"\${!$1[@]}\";do
 		[ -z \"\$c$2$1\" ] || echo -n ,
 		c$2$1=1
-		echo -n \\\"\$k$1$2\\\":
-		if [ \"\${$2[\$k$1$2]}\" = s ];then
-			jkparse -qs \"\${$1[\$k$1$2]}\"
-		else
-			echo -n \"\${$1[\$k$1$2]}\"
-		fi
+		jkparse -qs \"\$k$1$2\"
+		case \"\${$2[\$k$1$2]}\" in
+			s) echo -n :
+			   jkparse -qs \"\${$1[\$k$1$2]}\";;
+			n) echo -n :null;;
+			*) echo -n :\"\${$1[\$k$1$2]}\";;
+		esac
 	done"
 	echo -n }
 }
@@ -78,9 +79,10 @@ function jkparseObjToJson
 jkparseOutputToJson ()
 {
 	case $1 in
-		b|d|i|q) eval echo -n \"\$"$2"\" ;;
-		a) jkparseArrayToJson "$2" "$3" ;;
-		o) jkparseObjToJson "$2" "$3" ;;
-		s) eval jkparse -qs \"\$"$2"\" ;;
+		b|d|i|q) eval echo -n \"\$"$2"\";;
+		a) jkparseArrayToJson "$2" "$3";;
+		o) jkparseObjToJson "$2" "$3";;
+		s) eval jkparse -qs \"\$"$2"\";;
+		n) echo -n null;;
 	esac
 }

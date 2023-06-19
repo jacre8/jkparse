@@ -7,7 +7,8 @@ VPATH = $(BINDIR)
 
 CC ?= gcc
 CFLAGS ?= -s -O2
-CFLAGS += -Wall -Wshadow -Wimplicit -Wextra -Winline -Wundef -Wmissing-declarations -Wstrict-prototypes -Wmissing-prototypes -Wno-unused-parameter
+CFLAGS += -Wall -Wshadow -Wimplicit -Wextra -Winline -Wundef -Wmissing-declarations \
+-Wstrict-prototypes -Wmissing-prototypes -Wno-unused-parameter -Wtrampolines
 
 jkparse : jkparse.c | $(BINDIR)
 	$(CC) $(CFLAGS) $(JKPARSE_FLAGS) $(shell if [ -n "$(USE_SHELL_PRINTF)" ];then \
