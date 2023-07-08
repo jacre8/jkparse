@@ -84,8 +84,8 @@ function jkparseObjToJson
 #  Take variables created using jkparse and output JSON.  $3 can be the name of
 # an empty associative array, in which case it will be assumed that the jkparse
 # output was generated using the -q option when $1 = a or o.  If the optional
-# argument $3 is defined, object keys that match it will be treated as empty
-# strings in the output.  If $3 is undefined, keys matching the string $'\1'
+# argument $4 is defined, object keys that match it will be treated as empty
+# strings in the output.  If $4 is undefined, keys matching the string $'\1'
 # will be treated as empty key strings.
 jkparseOutputToJson ()
 {
