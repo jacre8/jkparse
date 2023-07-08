@@ -36,8 +36,11 @@ jkparse : jkparse.c | $(BINDIR)
 			echo USABLE PRINTF NOT FOUND!  Compiling with the default location >&2; \
 		fi; ) -o $(BINDIR)/jkparse $^ -ljson-c
 
-.PHONY : install
 install : $(DESTDIR)$(bindir)/jkparse
+
+.PHONY : clean
+clean :
+	rm -f $(BINDIR)/jkparse
 
 $(DESTDIR)$(bindir)/jkparse : jkparse | $(DESTDIR)$(bindir)
 	install -o root -g root -m 0755 bin/jkparse "$(DESTDIR)$(bindir)"

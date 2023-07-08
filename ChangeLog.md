@@ -1,3 +1,15 @@
+8 - 2023-07-08
+==============
+
+- Specifying an empty value with the -e/--empty-key option will now result in object values with
+empty keys being excluded from the output
+- jkparseObjToJson(), in jkparseOutputToJson.sh, now considers the placeholder value for empty
+keys in objects and will generate JSON objects containing empty keys when that key value matches
+- jkparseOutputToJson() and jkparseObjToJson() now accept an additional argument for specifying
+the object empty key placeholder value
+- Added clean target to Makefile
+
+
 7 - 2023-06-18
 ==============
 

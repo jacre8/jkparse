@@ -2,7 +2,7 @@
 //  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
 // similar shells.
 
-#define JKPRINT_VERSION_STRING "7"
+#define JKPRINT_VERSION_STRING "8"
 #define JKPRINT_VERSION_STRING_LONG "jkparse version " JKPRINT_VERSION_STRING \
 "\nCopyright (C) 2022-2023 Jason Hinsch\n" \
 "License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n" \
@@ -125,13 +125,6 @@ static void valPrintWithQuotedStrings(json_object * val)
 			putShEscapedString)(json_object_get_string(val));
 	else
 		fputs_unlocked("null", stdout);
-	/*enum json_type type = json_object_get_type(val);
-	if(json_type_null == type)
-		fputs_unlocked("null", stdout);
-	else
-		(json_type_string == type ? putShEscapedAndQuotedJsonString :
-			putShEscapedString)(json_object_get_string(val));
-	*/
 }
 
 
@@ -211,9 +204,10 @@ int main(int argc, char **argv)
 					"  this variable declaration is omitted from the output\n"
 					" -e, --empty-key=EMPTY_KEY\n"
 					"    Empty keys are valid in JSON but not in shell script arrays.  Specify a\n"
-					"  string to replace empty keys with.  The default is \"$'\\1'\".  This value\n"
-					"  must be suitable for shell use.  No verification or substitution in output is\n"
-					"  made for a non-empty value that is specified here.  An empty value is invalid\n"
+					"  string to replace empty keys with.  The default is $'\\1'.  This value must\n"
+					"  be suitable for shell use.  No verification or substitution in the output is\n"
+					"  made for a non-empty value that is specified here.  If EMPTY_KEY is an empty\n"
+					"  string, object values with empty keys will be excluded from the output\n"
 					" -l, --local-declarations\n"
 					"    Declare variables using the local keyword rather than the default, typeset\n"
 					" -o, --obj-var=JSON_OBJ\n"
@@ -258,11 +252,7 @@ int main(int argc, char **argv)
 				arrayVarName = optarg;
 				break;
 			case 'e':
-				if(! *(emptyKey = optarg))
-				{
-					fprintf(stderr, "An empty argument for --empty-key is invalid\n");
-					return EX_USAGE;
-				}
+				emptyKey = optarg;
 				break;
 			case 'l':
 				declareStr = "local";
@@ -334,7 +324,6 @@ int main(int argc, char **argv)
 	if(optind < argc)
 	{
 		//  The JSON object is an argument
-		//obj = json_tokener_parse(argv[optind]);
 		obj = json_tokener_parse_verbose(argv[optind], &parseError);
 	}
 	else
@@ -398,17 +387,18 @@ int main(int argc, char **argv)
 	{
 	#ifdef TRIM_ARRAY_LEADING_SPACE
 		const char * openBracketStr = "[";
-		json_object_object_foreach(obj, key, val)
-		{
-			fputs_unlocked(openBracketStr, stdout);
-			openBracketStr = " [";
+		const char * const addOpenBracketStr = " [";
 	#else
+		const char * const openBracketStr = " [";
+	#endif
 		json_object_object_foreach(obj, key, val)
 		{
-			fputs_unlocked(" [", stdout);
-	#endif
 			if(*key)
 			{
+				fputs_unlocked(openBracketStr, stdout);
+			#ifdef TRIM_ARRAY_LEADING_SPACE
+				openBracketStr = addOpenBracketStr;
+			#endif
 				int keyVal = *key;
 				//  Escape the following characters, newline, tab, and space in the key output:
 				//  !"$'();<>[\]`|  
@@ -480,15 +470,21 @@ int main(int argc, char **argv)
 					})
 				);
 			#endif
+				fputs_unlocked("]=", stdout);
+				valuePrintFunction(val);
 			}
-			else
+			else if(*emptyKey)
 			{
 				//  Empty keys are valid in JSON but not in shell scripts.
 				// Output emptyKey as the key.
+				fputs_unlocked(openBracketStr, stdout);
+			#ifdef TRIM_ARRAY_LEADING_SPACE
+				openBracketStr = addOpenBracketStr;
+			#endif
 				fputs_unlocked(emptyKey, stdout);
+				fputs_unlocked("]=", stdout);
+				valuePrintFunction(val);
 			}
-			fputs_unlocked("]=", stdout);
-			valuePrintFunction(val);
 		}
 	}
 	switch(type)

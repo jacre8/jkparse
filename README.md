@@ -62,9 +62,10 @@ Exampe Use
 	  this variable declaration is omitted from the output
 	 -e, --empty-key=EMPTY_KEY
 	    Empty keys are valid in JSON but not in shell script arrays.  Specify a
-	  string to replace empty keys with.  The default is "$'\1'".  This value
-	  must be suitable for shell use.  No verification or substitution in output is
-	  made for a non-empty value that is specified here.  An empty value is invalid
+	  string to replace empty keys with.  The default is $'\1'.  This value must
+	  be suitable for shell use.  No verification or substitution in the output is
+	  made for a non-empty value that is specified here.  If EMPTY_KEY is an empty
+	  string, object values with empty keys will be excluded from the output
 	 -l, --local-declarations
 	    Declare variables using the local keyword rather than the default, typeset
 	 -o, --obj-var=JSON_OBJ
