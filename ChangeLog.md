@@ -5,6 +5,8 @@
 segmentation fault
 - jkparseOutputToJson.sh bugfixes: encoding of strings beginning with a dash character ('-') would
 fail
+- Added jkparseOutputToJson.sh to the Makefile's install target.  It is placed in the same bin
+directory as jkparse and marked executable so that it can be sourced with tab completion
 - Re-added '.PHONY : install' to the Makefile, after accidently removing
 
 
