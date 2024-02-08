@@ -2,7 +2,7 @@
 //  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
 // similar shells.
 
-#define JKPRINT_VERSION_STRING "9"
+#define JKPRINT_VERSION_STRING "10"
 #define JKPRINT_VERSION_STRING_LONG "jkparse version " JKPRINT_VERSION_STRING \
 "\nCopyright (C) 2022-2024 Jason Hinsch\n" \
 "License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n" \
@@ -313,9 +313,17 @@ int main(int argc, char **argv)
 			char * input;
 			if(optind < argc)
 				input = argv[optind];
-			//  errno will be 0 if the input was an empty string.
 			else if(1 > scanf("%m[\x01-\xFF]", &input))
+			{
+				//  errno will be 0 if the input was an empty string
+				if(errno) {
+					if(verbose)
+						fprintf(stderr, "Error reading input: %s\n", strerror(errno));
+				}
+				else if(quoteStrings)
+					fputs_unlocked("\"\"", stdout);
 				return errno;
+			}
 			putJsonEscapedString(stdPutf, input, quoteStrings);
 			return 0;
 		}

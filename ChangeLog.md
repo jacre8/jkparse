@@ -1,3 +1,12 @@
+10 - 2024-02-07
+==============
+
+- Bugfix: the --quote-strings option is now honored when combined with the --stringify option even
+when an empty string is input over stdin
+- Added an error message for a read or memory allocation failure when reading from stdin when
+the --stringify and --verbose options are both specified
+
+
 9 - 2024-02-07
 ==============
 
