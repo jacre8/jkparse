@@ -1,7 +1,7 @@
 #  Functions for converting output from jkparse, after modifications, back to
 # JSON.  This is intended to be sourced.
 
-#  Copyright 2023 Jason Hinsch
+#  Copyright 2023-2024 Jason Hinsch
 #  No restrictions on use; Public Domain.
 
 #  Take the array variable whose name is in $1, with types in the array
@@ -19,7 +19,7 @@ function jkparseArrayToJson
 		[ -z \"\$c$2$1\" ] || echo -n ,
 		c$2$1=1
 		case \"\${$2[\$k$1$2]}\" in
-			s) jkparse -qs \"\${$1[\$k$1$2]}\";;
+			s) jkparse -qs -- \"\${$1[\$k$1$2]}\";;
 			n) echo -n null;;
 			*) echo -n \"\${$1[\$k$1$2]}\";;
 		esac
@@ -38,7 +38,7 @@ function jkparseContinuousArrayToJson
 	while [ \$((++i$1$2)) -lt \${#$1[@]} ];do
 		[ \"\$i$1$2\" = 0 ] || echo -n ,
 		case \"\${$2[\$i$1$2]}\" in
-			s) jkparse -qs \"\${$1[\$i$1$2]}\";;
+			s) jkparse -qs -- \"\${$1[\$i$1$2]}\";;
 			n) echo -n null;;
 			*) echo -n \"\${$1[\$i$1$2]}\";;
 		esac
@@ -65,11 +65,11 @@ function jkparseObjToJson
 		if [ \"\$k$1$2\" = \"\${3-$'\1'}\" ];then
 			printf '\"\"'
 		else
-			jkparse -qs \"\$k$1$2\"
+			jkparse -qs -- \"\$k$1$2\"
 		fi
 		case \"\${$2[\$k$1$2]}\" in
 			s) echo -n :
-			   jkparse -qs \"\${$1[\$k$1$2]}\";;
+			   jkparse -qs -- \"\${$1[\$k$1$2]}\";;
 			n) echo -n :null;;
 			*) echo -n :\"\${$1[\$k$1$2]}\";;
 		esac
