@@ -1,3 +1,13 @@
+9 - 2024-02-07
+==============
+
+- Bugfix: reading in an empty string over stdin with the --stringify option would result in a
+segmentation fault
+- jkparseOutputToJson.sh bugfixes: encoding of strings beginning with a dash character ('-') would
+fail
+- Re-added '.PHONY : install' to the Makefile, after accidently removing
+
+
 8 - 2023-07-08
 ==============
 

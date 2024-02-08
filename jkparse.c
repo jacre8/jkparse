@@ -2,9 +2,9 @@
 //  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
 // similar shells.
 
-#define JKPRINT_VERSION_STRING "8"
+#define JKPRINT_VERSION_STRING "9"
 #define JKPRINT_VERSION_STRING_LONG "jkparse version " JKPRINT_VERSION_STRING \
-"\nCopyright (C) 2022-2023 Jason Hinsch\n" \
+"\nCopyright (C) 2022-2024 Jason Hinsch\n" \
 "License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n" \
 "See https://github.com/jacre8/jkparse for the latest version and documentation\n"
 
@@ -27,6 +27,8 @@
 //#define WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
 
 #define _GNU_SOURCE // for fputs_unlocked
+#include <errno.h>
+#include <getopt.h>
 //  It is recommended that a symlink be created at json-c/json.h if it is located somewhere else.
 #ifdef __has_include
 	#if __has_include(<json-c/json.h>)
@@ -37,7 +39,6 @@
 #else
 	#include <json-c/json.h>
 #endif
-#include <getopt.h>
 #include <stdio.h>
 #include <stdio_ext.h> // __fsetlocking()
 #include <stdlib.h>
@@ -312,9 +313,9 @@ int main(int argc, char **argv)
 			char * input;
 			if(optind < argc)
 				input = argv[optind];
-			else
-				//  Not only is this inefficient with memory, there is no limit on size here...
-				scanf("%m[\x01-\xFF]", &input);
+			//  errno will be 0 if the input was an empty string.
+			else if(1 > scanf("%m[\x01-\xFF]", &input))
+				return errno;
 			putJsonEscapedString(stdPutf, input, quoteStrings);
 			return 0;
 		}
