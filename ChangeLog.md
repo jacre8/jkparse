@@ -1,22 +1,29 @@
-10 - 2024-02-07
-==============
+2024-02-10
+==========
 
-- Bugfix: the --quote-strings option is now honored when combined with the --stringify option even
-when an empty string is input over stdin
-- Added an error message for a read or memory allocation failure when reading from stdin when
+- jkparseOutputToJson.sh
+	- Function definitions now include zsh compatible versions
+	- Bugfix: jkparseOutputToJson() can now encode an unquoted string that begins with a dash
+character ('-')
+
+
+2024-02-07
+==========
+
+- jkparse 10
+	- Bugfix: the --quote-strings option is now honored when combined with the --stringify option
+even when an empty string is input over stdin
+	- Added an error message for a read or memory allocation failure when reading from stdin when
 the --stringify and --verbose options are both specified
-
-
-9 - 2024-02-07
-==============
-
-- Bugfix: reading in an empty string over stdin with the --stringify option would result in a
+- jkparse 9
+	- Bugfix: reading in an empty string over stdin with the --stringify option would result in a
 segmentation fault
-- jkparseOutputToJson.sh bugfixes: encoding of strings beginning with a dash character ('-') would
-fail
-- Added jkparseOutputToJson.sh to the Makefile's install target.  It is placed in the same bin
+- jkparseOutputToJson.sh bugfixes: encoding of objects and arrays containing strings beginning with
+a dash character ('-') would fail
+- Makefile
+	- Re-added '.PHONY : install' to the Makefile, after accidently removing
+	- Added jkparseOutputToJson.sh to the Makefile's install target.  It is placed in the same bin
 directory as jkparse and marked executable so that it can be sourced with tab completion
-- Re-added '.PHONY : install' to the Makefile, after accidently removing
 
 
 8 - 2023-07-08
