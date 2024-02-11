@@ -4,6 +4,9 @@ jkparse
 A JSON parser for shell scripts that utilizes the (associative) array
 capabilities of bash, ksh, zsh, and similar shells.  Programmed in C.
 Uses the [json-c](https://github.com/json-c/json-c/wiki) library.
+  
+The companion shell script library, libjkparse.sh, contains functions
+to help read, modify, and output JSON using this tool.
 
 
 Why another JSON parser?
@@ -179,7 +182,8 @@ JSON parsers for shell use (some of these, like jq, generate JSON as well):
 [jsoncvt](https://github.com/krz8/jsoncvt) can also directly output a
 ksh associative array.  It has less dependencies, human readable output,
 and supports generating multidimensional arrays.  
-[jq](https://stedolan.github.io/jq/), a de-facto standard.  
+[jq](https://stedolan.github.io/jq/), a de-facto standard.  Powerful, with a
+bit of a learning curve.  
 [jshon](http://kmkeen.com/jshon/)  
 [JSON.sh](https://github.com/dominictarr/JSON.sh)  
 [json.sh](https://github.com/rcrowley/json.sh)  
@@ -192,5 +196,8 @@ including JSON parsing.
 [jsawk](https://github.com/micha/jsawk)  
   
 JSON generators for shell use:  
+[jsoncat](https://github.com/pantuza/jsoncat) lightweight, formats JSON in a
+human readable format with optional color, and supports special characters in
+keys.  
 [jo](https://github.com/jpmens/jo)  
 [json_pp](https://github.com/deftek/json_pp)

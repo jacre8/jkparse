@@ -39,7 +39,7 @@ jkparse : jkparse.c | $(BINDIR)
 #  jkparseOutputToJson.sh is placed in the bin directory and made executable
 # so that it can be sourced with tab completion
 .PHONY : install
-install : $(DESTDIR)$(bindir)/jkparse $(DESTDIR)$(bindir)/jkparseOutputToJson.sh
+install : $(DESTDIR)$(bindir)/jkparse $(DESTDIR)$(bindir)/libjkparse.sh
 
 .PHONY : clean
 clean :
@@ -48,8 +48,8 @@ clean :
 $(DESTDIR)$(bindir)/jkparse : jkparse | $(DESTDIR)$(bindir)
 	install -o root -g root -m 0755 bin/jkparse "$(DESTDIR)$(bindir)"
 
-$(DESTDIR)$(bindir)/jkparseOutputToJson.sh : jkparseOutputToJson.sh | $(DESTDIR)$(bindir)
-	install -o root -g root -m 0755 jkparseOutputToJson.sh "$(DESTDIR)$(bindir)"
+$(DESTDIR)$(bindir)/libjkparse.sh : libjkparse.sh | $(DESTDIR)$(bindir)
+	install -o root -g root -m 0755 libjkparse.sh "$(DESTDIR)$(bindir)"
 
 $(DESTDIR)$(bindir) : | $(DESTDIR)$(exec_prefix)
 

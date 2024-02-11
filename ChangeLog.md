@@ -1,3 +1,17 @@
+2024-02-11
+==========
+
+- jkparse 11
+	- The generated code now has a non-zero exit code when there is a parse error
+	- Bugfix: return non-zero upon a parse error when --obj-var is specified as empty
+- Renamed jkparseOutputToJson.sh to libjkparse.sh
+- libjkparse.sh v1
+	- Added jkparseGet() and jkparseSet()
+	- Renamed jkparseOutputToJson() to jkparseToJson()
+	- Exports LIBJKPARSE_VERSION
+	- Bugfix: zsh output functions would erroneously interpret escapes inside strings
+
+
 2024-02-10
 ==========
 
@@ -26,29 +40,39 @@ a dash character ('-') would fail
 directory as jkparse and marked executable so that it can be sourced with tab completion
 
 
-8 - 2023-07-08
-==============
+2023-07-08
+==========
 
-- Specifying an empty value with the -e/--empty-key option will now result in object values with
-empty keys being excluded from the output
-- jkparseObjToJson(), in jkparseOutputToJson.sh, now considers the placeholder value for empty
+- jkparse 8
+	- Specifying an empty value with the -e/--empty-key option will now result in object values
+with empty keys being excluded from the output
+- jkparseOutputToJson.sh
+	- jkparseObjToJson(), in jkparseOutputToJson.sh, now considers the placeholder value for empty
 keys in objects and will generate JSON objects containing empty keys when that key value matches
-- jkparseOutputToJson() and jkparseObjToJson() now accept an additional argument for specifying
+	- jkparseOutputToJson() and jkparseObjToJson() now accept an additional argument for specifying
 the object empty key placeholder value
 - Added clean target to Makefile
 
 
-7 - 2023-06-18
-==============
+2023-06-18
+==========
 
-- Bugfix: newline characters are no longer escaped in associative array key values
-- Added parse error reporting, both in the program's return code and more descriptively via the
+- jkparse 7
+	- Bugfix: newline characters are no longer escaped in associative array key values
+	- Added parse error reporting, both in the program's return code and more descriptively via the
 new --verbose option
-- The --quote-strings option will now also result in null object values being output as the string,
+	- The --quote-strings option will now also result in null object values being output as the string,
 null, rather than as empty strings
-- The jkparseArrayToJson() and jkparseObjToJson() functions in jkparseOutputToJson.sh now properly
-format null values
-- The jkparseObjToJson() shell function now properly encodes key values as JSON strings
+- jkparseOutputToJson.sh
+	- The jkparseArrayToJson() and jkparseObjToJson() functions in jkparseOutputToJson.sh now
+properly format null values
+	- The jkparseObjToJson() shell function now properly encodes key values as JSON strings
+
+
+2023-06-17
+==========
+
+- Added jkparseOutputToJson.sh to the repository
 
 
 6 - 2023-06-16

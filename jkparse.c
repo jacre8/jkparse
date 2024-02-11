@@ -2,7 +2,7 @@
 //  JSON parser for shell scripts that utilizes the (associative) array capabilities of ksh and
 // similar shells.
 
-#define JKPRINT_VERSION_STRING "10"
+#define JKPRINT_VERSION_STRING "11"
 #define JKPRINT_VERSION_STRING_LONG "jkparse version " JKPRINT_VERSION_STRING \
 "\nCopyright (C) 2022-2024 Jason Hinsch\n" \
 "License: GPLv2 <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>\n" \
@@ -358,77 +358,104 @@ int main(int argc, char **argv)
 	if(parseError && verbose)
 		fprintf(stderr, "Error parsing JSON: %s\n", json_tokener_error_desc(parseError));
 	json_type type = json_object_get_type(obj);
-	if(0 == *objVarName)
+	if(*objVarName)
 	{
-		if(*typeVarName)
+		static const char * associativeDeclareType = "-A ";
+		static const char * arrayDeclareType = "-a ";
+		char objTypeChar;
+		void printTypeAndBeginObjWithType(const char * declareType)
 		{
-			char typeChar = *json_type_to_name(type);
-			printf("%s %s=%c\n", declareStr, typeVarName,
-				's' == typeChar && quoteStrings ? 'q' : typeChar);
+			//  Include a ';' between commands so that this can also be used with eval
+			if(*typeVarName)
+				printf("%s %s=%c;", declareStr, typeVarName, objTypeChar);
+			if(unsetVars)
+				printf("unset %s;", objVarName);
+			printf("%s %s%s=", declareStr, declareType, objVarName);
 		}
-		return 0;
-	}
-	static const char * associativeDeclareType = "-A ";
-	static const char * arrayDeclareType = "-a ";
-	char objTypeChar;
-	void printTypeAndBeginObjWithType(const char * declareType)
-	{
-		//  Include a ';' between commands so that this can also be used with eval
-		if(*typeVarName)
-			printf("%s %s=%c;", declareStr, typeVarName, objTypeChar);
-		if(unsetVars)
-			printf("unset %s;", objVarName);
-		printf("%s %s%s=", declareStr, declareType, objVarName);
-	}
-	void printTypeAndBeginObj(void)
-	{
-		printTypeAndBeginObjWithType("");
-	}
-	void printArrayClosureAndBeginArrayVar(const char * declareType)
-	{
-		//  Include a ';' between commands so that this can also be used with eval
-		fputs_unlocked(");", stdout);
-		if(unsetVars)
-			printf("unset %s;", arrayVarName);
-		printf("%s %s%s=(", declareStr, declareType, arrayVarName);
-	}
-	void printObject(void (*valuePrintFunction)(json_object *))
-	{
-	#ifdef TRIM_ARRAY_LEADING_SPACE
-		const char * openBracketStr = "[";
-		const char * const addOpenBracketStr = " [";
-	#else
-		const char * const openBracketStr = " [";
-	#endif
-		json_object_object_foreach(obj, key, val)
+		void printTypeAndBeginObj(void)
 		{
-			if(*key)
+			printTypeAndBeginObjWithType("");
+		}
+		void printArrayClosureAndBeginArrayVar(const char * declareType)
+		{
+			//  Include a ';' between commands so that this can also be used with eval
+			fputs_unlocked(");", stdout);
+			if(unsetVars)
+				printf("unset %s;", arrayVarName);
+			printf("%s %s%s=(", declareStr, declareType, arrayVarName);
+		}
+		void printObject(void (*valuePrintFunction)(json_object *))
+		{
+		#ifdef TRIM_ARRAY_LEADING_SPACE
+			const char * openBracketStr = "[";
+			const char * const addOpenBracketStr = " [";
+		#else
+			const char * const openBracketStr = " [";
+		#endif
+			json_object_object_foreach(obj, key, val)
 			{
-				fputs_unlocked(openBracketStr, stdout);
-			#ifdef TRIM_ARRAY_LEADING_SPACE
-				openBracketStr = addOpenBracketStr;
-			#endif
-				int keyVal = *key;
-				//  Escape the following characters, newline, tab, and space in the key output:
-				//  !"$'();<>[\]`|  
-				//  () and whitespace need to be escaped for zsh.  Excaping these makes no
-				// difference in bash or ksh.  '#' could also be escaped for better ASCII
-				// grouping in bash and ksh, but not in zsh
-				char * segmentStart = key;
-			#ifdef WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
-				//  Old zsh versions are particularly finicky about ", ', ;, <, >, and | characters in array
-				// subscripts.  It is not enough to escape these characters - they must come from either
-				// a variable or command substitution.  $'|' or $'\x7c', for example, do not work.
-				while(
-					(
-						'"' != keyVal && '\'' != keyVal && ';' != keyVal &&
-						'<' != keyVal && '>' != keyVal && '|' != keyVal
-					) ? (
+				if(*key)
+				{
+					fputs_unlocked(openBracketStr, stdout);
+				#ifdef TRIM_ARRAY_LEADING_SPACE
+					openBracketStr = addOpenBracketStr;
+				#endif
+					int keyVal = *key;
+					//  Escape the following characters, newline, tab, and space in the key output:
+					//  !"$'();<>[\]`|  
+					//  () and whitespace need to be escaped for zsh.  Excaping these makes no
+					// difference in bash or ksh.  '#' could also be escaped for better ASCII
+					// grouping in bash and ksh, but not in zsh
+					char * segmentStart = key;
+				#ifdef WORKAROUND_OLD_ZSH_SUBSCRIPT_BUGS
+					//  Old zsh versions are particularly finicky about ", ', ;, <, >, and | characters in array
+					// subscripts.  It is not enough to escape these characters - they must come from either
+					// a variable or command substitution.  $'|' or $'\x7c', for example, do not work.
+					while(
 						(
-							'\t' != keyVal && ' ' != keyVal && '!' != keyVal &&
-							 '$' != keyVal && '(' != keyVal && ')' != keyVal &&
-							//  This range includes '\\'
-							('[' > keyVal || ']' < keyVal) && '`' != keyVal
+							'"' != keyVal && '\'' != keyVal && ';' != keyVal &&
+							'<' != keyVal && '>' != keyVal && '|' != keyVal
+						) ? (
+							(
+								'\t' != keyVal && ' ' != keyVal && '!' != keyVal &&
+								 '$' != keyVal && '(' != keyVal && ')' != keyVal &&
+								//  This range includes '\\'
+								('[' > keyVal || ']' < keyVal) && '`' != keyVal
+							) ? (
+								(keyVal = *(++key)) || ({
+									fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
+									0;
+								})
+							) : ({
+								//  Output all characters proceding the character needing escaping, and
+								// then output the escaped character
+								fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
+								putc_unlocked('\\', stdout);
+								putc_unlocked(keyVal, stdout);
+								keyVal = *(segmentStart = ++key);
+							})
+						) : ({
+							//  This character requires substitution in zsh.  Output the rest
+							// of the key as a command substitution
+							fputs_unlocked("$(echo ", stdout);
+							putShEscapedString(segmentStart);
+							putc_unlocked(')', stdout);
+							0;
+						})
+					);
+				#else
+					while(
+						(
+							'\t' != keyVal &&
+							//  This range includes '!':
+							(' ' > keyVal || '"' < keyVal) &&
+							'$' != keyVal &&
+							//  This range includes '(':
+							('\'' > keyVal || ')' < keyVal) &&
+							';' != keyVal && '<' != keyVal && '>' != keyVal && 
+							//  This range includes '\\':
+							('[' > keyVal || ']' < keyVal) &&
+							'`' != keyVal && '|' != keyVal
 						) ? (
 							(keyVal = *(++key)) || ({
 								fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
@@ -442,181 +469,155 @@ int main(int argc, char **argv)
 							putc_unlocked(keyVal, stdout);
 							keyVal = *(segmentStart = ++key);
 						})
-					) : ({
-						//  This character requires substitution in zsh.  Output the rest
-						// of the key as a command substitution
-						fputs_unlocked("$(echo ", stdout);
-						putShEscapedString(segmentStart);
-						putc_unlocked(')', stdout);
-						0;
-					})
-				);
-			#else
-				while(
-					(
-						'\t' != keyVal &&
-						//  This range includes '!':
-						(' ' > keyVal || '"' < keyVal) &&
-						'$' != keyVal &&
-						//  This range includes '(':
-						('\'' > keyVal || ')' < keyVal) &&
-						';' != keyVal && '<' != keyVal && '>' != keyVal && 
-						//  This range includes '\\':
-						('[' > keyVal || ']' < keyVal) &&
-						'`' != keyVal && '|' != keyVal
-					) ? (
-						(keyVal = *(++key)) || ({
-							fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
-							0;
-						})
-					) : ({
-						//  Output all characters proceding the character needing escaping, and
-						// then output the escaped character
-						fwrite_unlocked(segmentStart, key - segmentStart, 1, stdout);
-						putc_unlocked('\\', stdout);
-						putc_unlocked(keyVal, stdout);
-						keyVal = *(segmentStart = ++key);
-					})
-				);
-			#endif
-				fputs_unlocked("]=", stdout);
-				valuePrintFunction(val);
-			}
-			else if(*emptyKey)
-			{
-				//  Empty keys are valid in JSON but not in shell scripts.
-				// Output emptyKey as the key.
-				fputs_unlocked(openBracketStr, stdout);
-			#ifdef TRIM_ARRAY_LEADING_SPACE
-				openBracketStr = addOpenBracketStr;
-			#endif
-				fputs_unlocked(emptyKey, stdout);
-				fputs_unlocked("]=", stdout);
-				valuePrintFunction(val);
+					);
+				#endif
+					fputs_unlocked("]=", stdout);
+					valuePrintFunction(val);
+				}
+				else if(*emptyKey)
+				{
+					//  Empty keys are valid in JSON but not in shell scripts.
+					// Output emptyKey as the key.
+					fputs_unlocked(openBracketStr, stdout);
+				#ifdef TRIM_ARRAY_LEADING_SPACE
+					openBracketStr = addOpenBracketStr;
+				#endif
+					fputs_unlocked(emptyKey, stdout);
+					fputs_unlocked("]=", stdout);
+					valuePrintFunction(val);
+				}
 			}
 		}
-	}
-	switch(type)
-	{
-	case json_type_null: // (i.e. obj == NULL),
-		objTypeChar = 'n';
-		printTypeAndBeginObj();
-		if(quoteStrings)
-			fputs_unlocked("null\n", stdout);
-		else
-			putc_unlocked('\n', stdout);
-		break;
-	case json_type_boolean:
-		objTypeChar = 'b';
-		goto outputObjPlainly;
-	case json_type_double:
-		objTypeChar = 'd';
-		goto outputObjPlainly;
-	case json_type_int:
-		objTypeChar = 'i';
-	outputObjPlainly:
-		//objTypeChar = *json_type_to_name(type);
-		printTypeAndBeginObj();
-		puts(json_object_get_string(obj));
-		break;
-	case json_type_object:
-		objTypeChar = 'o';
-		printTypeAndBeginObjWithType(associativeDeclareType);
-		putc_unlocked('(', stdout);
+		switch(type)
 		{
-			void valPrintWithoutQuotedStrings(json_object * val)
+		case json_type_null: // (i.e. obj == NULL),
+			objTypeChar = 'n';
+			printTypeAndBeginObj();
+			if(quoteStrings)
+				fputs_unlocked("null\n", stdout);
+			else
+				putc_unlocked('\n', stdout);
+			break;
+		case json_type_boolean:
+			objTypeChar = 'b';
+			goto outputObjPlainly;
+		case json_type_double:
+			objTypeChar = 'd';
+			goto outputObjPlainly;
+		case json_type_int:
+			objTypeChar = 'i';
+		outputObjPlainly:
+			//objTypeChar = *json_type_to_name(type);
+			printTypeAndBeginObj();
+			puts(json_object_get_string(obj));
+			break;
+		case json_type_object:
+			objTypeChar = 'o';
+			printTypeAndBeginObjWithType(associativeDeclareType);
+			putc_unlocked('(', stdout);
 			{
-				putShEscapedString(json_object_get_string(val));
-			}
-			printObject(quoteStrings ? valPrintWithQuotedStrings : valPrintWithoutQuotedStrings);
-		}
-		if(*arrayVarName)
-		{
-			void valTypePrint(json_object * val)
-			{
-				putc_unlocked(*json_type_to_name(json_object_get_type(val)), stdout);
-			}
-			void valTypePrintWithQForStrings(json_object * val)
-			{
-				char typeChar = *json_type_to_name(json_object_get_type(val));
-				putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
-			}
-			printArrayClosureAndBeginArrayVar(associativeDeclareType);
-			printObject(quoteStrings ? valTypePrintWithQForStrings : valTypePrint);
-		}
-		puts(")");
-		break;
-	case json_type_array:
-		objTypeChar = 'a';
-		printTypeAndBeginObjWithType(arrayDeclareType);
-		putc_unlocked('(', stdout);
-		{
-			void arrayValPrintWithoutQuotedStrings(json_object * objAtIndex)
-			{
-				if(NULL == objAtIndex)
-					fputs_unlocked("''", stdout);
-				else
-					putShEscapedString(json_object_get_string(objAtIndex));
-			}
-			void (*valPrint)(json_object *) = quoteStrings
-				? valPrintWithQuotedStrings : arrayValPrintWithoutQuotedStrings;
-			int arrayLength = json_object_array_length(obj);
-			for(int index = 0; index < arrayLength; index++)
-			{
-			#ifdef TRIM_ARRAY_LEADING_SPACE
-				if(index)
-			#endif
-					putc_unlocked(' ', stdout);
-				valPrint(json_object_array_get_idx(obj, index));
+				void valPrintWithoutQuotedStrings(json_object * val)
+				{
+					putShEscapedString(json_object_get_string(val));
+				}
+				printObject(quoteStrings ? valPrintWithQuotedStrings : valPrintWithoutQuotedStrings);
 			}
 			if(*arrayVarName)
 			{
-				printArrayClosureAndBeginArrayVar(arrayDeclareType);
-				if(quoteStrings)
+				void valTypePrint(json_object * val)
 				{
-					for(int index = 0; index < arrayLength; index++)
-					{
-					#ifdef TRIM_ARRAY_LEADING_SPACE
-						if(index)
-					#endif
-							putc_unlocked(' ', stdout);
-						char typeChar = *json_type_to_name(json_object_get_type(
-							json_object_array_get_idx(obj, index)));
-						putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
-					}
+					putc_unlocked(*json_type_to_name(json_object_get_type(val)), stdout);
 				}
-				else
+				void valTypePrintWithQForStrings(json_object * val)
 				{
-					for(int index = 0; index < arrayLength; index++)
+					char typeChar = *json_type_to_name(json_object_get_type(val));
+					putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
+				}
+				printArrayClosureAndBeginArrayVar(associativeDeclareType);
+				printObject(quoteStrings ? valTypePrintWithQForStrings : valTypePrint);
+			}
+			puts(")");
+			break;
+		case json_type_array:
+			objTypeChar = 'a';
+			printTypeAndBeginObjWithType(arrayDeclareType);
+			putc_unlocked('(', stdout);
+			{
+				void arrayValPrintWithoutQuotedStrings(json_object * objAtIndex)
+				{
+					if(NULL == objAtIndex)
+						fputs_unlocked("''", stdout);
+					else
+						putShEscapedString(json_object_get_string(objAtIndex));
+				}
+				void (*valPrint)(json_object *) = quoteStrings
+					? valPrintWithQuotedStrings : arrayValPrintWithoutQuotedStrings;
+				int arrayLength = json_object_array_length(obj);
+				for(int index = 0; index < arrayLength; index++)
+				{
+				#ifdef TRIM_ARRAY_LEADING_SPACE
+					if(index)
+				#endif
+						putc_unlocked(' ', stdout);
+					valPrint(json_object_array_get_idx(obj, index));
+				}
+				if(*arrayVarName)
+				{
+					printArrayClosureAndBeginArrayVar(arrayDeclareType);
+					if(quoteStrings)
 					{
-					#ifdef TRIM_ARRAY_LEADING_SPACE
-						if(index)
-					#endif
-							putc_unlocked(' ', stdout);
-						putc_unlocked(*json_type_to_name(json_object_get_type(
-							json_object_array_get_idx(obj, index))), stdout);
+						for(int index = 0; index < arrayLength; index++)
+						{
+						#ifdef TRIM_ARRAY_LEADING_SPACE
+							if(index)
+						#endif
+								putc_unlocked(' ', stdout);
+							char typeChar = *json_type_to_name(json_object_get_type(
+								json_object_array_get_idx(obj, index)));
+							putc_unlocked('s' == typeChar ? 'q' : typeChar, stdout);
+						}
+					}
+					else
+					{
+						for(int index = 0; index < arrayLength; index++)
+						{
+						#ifdef TRIM_ARRAY_LEADING_SPACE
+							if(index)
+						#endif
+								putc_unlocked(' ', stdout);
+							putc_unlocked(*json_type_to_name(json_object_get_type(
+								json_object_array_get_idx(obj, index))), stdout);
+						}
 					}
 				}
 			}
+			puts(")");
+			break;
+		case json_type_string:
+			(
+				quoteStrings ?
+				({
+					objTypeChar = 'q';
+					printTypeAndBeginObj();
+					putShEscapedAndQuotedJsonString;
+				}) : ({
+					objTypeChar = 's';
+					printTypeAndBeginObj();
+					putShEscapedString;
+				})
+			)(json_object_get_string(obj));
+			putc_unlocked('\n', stdout);
+			break;
 		}
-		puts(")");
-		break;
-	case json_type_string:
-		(
-			quoteStrings ?
-			({
-				objTypeChar = 'q';
-				printTypeAndBeginObj();
-				putShEscapedAndQuotedJsonString;
-			}) : ({
-				objTypeChar = 's';
-				printTypeAndBeginObj();
-				putShEscapedString;
-			})
-		)(json_object_get_string(obj));
-		putc_unlocked('\n', stdout);
-		break;
+	}
+	else if(*typeVarName)
+	{
+		char typeChar = *json_type_to_name(type);
+		printf("%s %s=%c\n", declareStr, typeVarName,
+			's' == typeChar && quoteStrings ? 'q' : typeChar);
 	}
 	//json_object_put(obj);
+	if(parseError)
+		printf("(exit %d)\n", parseError);
 	return parseError;
 }
