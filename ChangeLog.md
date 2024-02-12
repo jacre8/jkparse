@@ -1,3 +1,18 @@
+2024-02-12
+==========
+
+- libjkparse.sh v2
+	- Added workarounds for variable scoping issues in ksh, with possible namespace caveats as
+noted in the comments.  jkparseSet() now works in ksh
+	- jkparseArrayToJson() now fills in the missing indices of sparse arrays in bash and ksh so
+that the output has the same indices as the array did in the shell.  A new function,
+jkparseCompactArrayToJson(), contains the old behavior of dropping missing indices in the output,
+although it is faster and suitable in cases where dropped indices are not a concern
+	- Implemented Q versions of the jkparseToJson functions that are a little faster but depend on
+the JSON having been parsed using jkparse's -q option
+	- Optimized jkparseSet() implementation
+
+
 2024-02-11
 ==========
 

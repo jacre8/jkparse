@@ -3,7 +3,7 @@
 # output from jkparse, presumably after modifications, back to JSON.  This is
 # intended to be sourced, although there are no license restrictions to prevent
 # copying the definitions within this file into another work.
-export LIBJKPARSE_VERSION=1 # previously named jkparseOutputToJson.sh
+export LIBJKPARSE_VERSION=2
 
 #  Copyright 2023-2024 Jason Hinsch
 #  No restrictions on use; Public Domain.
@@ -13,6 +13,20 @@ export LIBJKPARSE_VERSION=1 # previously named jkparseOutputToJson.sh
 # but not pretty.  Their output also does not include a trailing newline.
 # Consider piping their output through another tool for more human readable
 # output, such as jq or jsoncat.
+
+#  There are potential namespace conflicts in ksh with the jkparseToJson
+# functions.  Ideally, the jkparseToJson functions would have both their
+# own local variables and have access to their caller's variables.  In ksh,
+# however, it is not possible for a function to have both -- functions declared
+# with the function keyword cannot access variables declared by a calling
+# function that, itself, was also declared with the function keyword.  The
+# current implementation of the jkparseToJson functions will declare their
+# variables in the caller's namespace rather than function local, which 
+# permits them access to the named variables at the cost of potential name
+# conflicts.  ksh93u+m has plans to implement the local keyword which, if used
+# here, could resolve this issue.
+#  This is not a concern in bash which, using the same syntax, declare's its
+# variables function local while still having access to the callers variables.
 
 #  The following functions are defined here:
 
@@ -62,7 +76,7 @@ export LIBJKPARSE_VERSION=1 # previously named jkparseOutputToJson.sh
 # empty strings in the output.  If $3 is undefined, keys matching the string
 # $'\1' will be treated as empty key strings.
 
-# jkpaseArrayToJson()
+# jkparseArrayToJson()
 #  $1 = name of JSON_OBJ
 #  $2 = name of JSON_OBJ_TYPES
 #  Take the array variable whose name is in $1, with types in the array
@@ -70,11 +84,44 @@ export LIBJKPARSE_VERSION=1 # previously named jkparseOutputToJson.sh
 # empty array, in which case it will be assumed that the jkparse output was
 # generated using the -q option.
 
+# jkparseCompactArrayToJson()
+#  $1 = name of JSON_OBJ
+#  $2 = name of JSON_OBJ_TYPES
+#  bash and ksh support sparse arrays: arrays with non-continuous indices.
+# The regular jkpaseArrayToJson function will interpret gaps in the indices as
+# members containing null values, so that the indices in the generated JSON
+# will correspond to the indices of the source shell's array.  In some use
+# cases this may be undesirable, or it may be already assured that the shell
+# array does not contain gaps, such as when jkparse generated the source array.
+# jkparseCompactArrayToJson() exists for these use cases.  This function will
+# skip missing indices in the resulting JSON if the source array is sparse.  It
+# is slightly faster than jkpaseArrayToJson(), although it does not guarantee
+# that the indices align with the source in all cases.
+
 # jkparseContinuousArrayToJson()
 #  $1 = name of JSON_OBJ
 #  $2 = name of JSON_OBJ_TYPES
-#  Like jkparseArrayToJson(), and possibly faster, but it does not handle
+#  Possibly faster than jkparseCompactArrayToJson(), but does not handle
 # missing elements in bash and ksh gracefully.
+
+# jkparseQToJson()
+#  $1 = $JSON_TYPE
+#  $2 = name of JSON_OBJ
+#  $3 (optional) = object EMPTY_KEY string (the default, if undefined, is $'\1')
+# jkparseQObjToJson()
+#  $1 = name of JSON_OBJ
+#  $2 (optional) = object EMPTY_KEY string (the default, if undefined, is $'\1')
+# jkparseQArrayToJson()
+#  $1 = name of JSON_OBJ
+# jkparseQCompactArrayToJson()
+#  $1 = name of JSON_OBJ
+# jkparseQContinuousArrayToJson()
+#  $1 = name of JSON_OBJ
+#  These are similar to functions of the same name without the Q, except that
+# they do not accept a JSON_OBJ_TYPES name argument.  These function versions
+# expect that the source variables were setup using jkparse's -q option.  These
+# are slightly faster than the versions that have additional type handling.
+
 
 function jkparseGet
 {
@@ -94,20 +141,19 @@ function jkparseGet
 
 function jkparseSet
 {
-	. <(jkparse -qa OBJ_TYPES) && {
+	. <(jkparse -q) && {
 		[ $JSON_TYPE = o ] || [ $JSON_TYPE = a ]
 	} &&
 	if [ ${#@} -lt 3 ];then
-		. <(jkparse -qo '' -t childType <<< "$2") &&
-		JSON_OBJ[$1]=$2 &&
-		OBJ_TYPES[$1]=$childType
+		. <(jkparse -qo '' -t '' <<< "$2") &&
+		JSON_OBJ[$1]=$2
 	else
 		JSON_OBJ[$1]=$(jkparseSet "${@:2}" <<< "${JSON_OBJ[$1]}")
 	fi &&
 	if [ $JSON_TYPE = o ];then
-		jkparseObjToJson JSON_OBJ OBJ_TYPES
+		jkparseQObjToJson JSON_OBJ
 	else
-		jkparseArrayToJson JSON_OBJ OBJ_TYPES
+		jkparseQContinuousArrayToJson JSON_OBJ
 	fi
 }
 
@@ -115,15 +161,25 @@ jkparseToJson ()
 {
 	case $1 in
 		b|d|i|q) eval printf %s \"\$"$2"\";;
-		a) jkparseArrayToJson "$2" "$3";;
 		o) eval jkparseObjToJson '$2' '$3' \"\${4-$'\1'}\";;
+		a) jkparseArrayToJson "$2" "$3";;
 		s) eval jkparse -qs -- \"\$"$2"\";;
 		n) echo -n null;;
 	esac
 }
 
-#  To avoid any possible name conflicts, the names of local variables inside
-# these functions incorporate all variable argument names.
+jkparseQToJson ()
+{
+	case $1 in
+		o) eval jkparseQObjToJson '$2' \"\${3-$'\1'}\";;
+		a) jkparseQArrayToJson "$2" ;;
+		*) eval printf %s \"\$"$2"\";;
+	esac
+}
+
+#  To avoid any possible name conflicts with the name arguments, the names of
+# local variables inside these functions incorporate all variable argument
+# names.
 if [ -n "$ZSH_VERSION" ];then
 	jkparseObjToJson ()
 	{
@@ -148,6 +204,24 @@ if [ -n "$ZSH_VERSION" ];then
 		echo -n '}'
 	}
 	
+	jkparseQObjToJson ()
+	{
+		#  key and comma flag local variables
+		echo -n '{'
+		eval "local k$1 c$1=
+		for k$1 in \"\${(@k)$1}\";do
+			[ -z \"\$c$1\" ] || echo -n ,
+			c$1=1
+			if [ \"\$k$1\" = \"\${2-$'\1'}\" ];then
+				printf '\"\"'
+			else
+				jkparse -qs -- \"\$k$1\"
+			fi
+			printf %s :\"\${$1[\$k$1]}\"
+		done"
+		echo -n '}'
+	}
+	
 	#  zsh does not create sparse arrays
 	jkparseArrayToJson ()
 	{
@@ -164,9 +238,25 @@ if [ -n "$ZSH_VERSION" ];then
 		done"
 		echo -n ]
 	}
+	
+	jkparseQArrayToJson ()
+	{
+		#  index local variable
+		echo -n [
+		eval "local i$1=0
+		while [ \$i$1 -lt \${#$1[@]} ];do
+			[ \"\$((i$1++))\" = 0 ] || echo -n ,
+			printf %s \"\${$1[\$i$1]}\"
+		done"
+		echo -n ]
+	}
+	
+	alias jkparseCompactArrayToJson=jkparseArrayToJson
+	alias jkparseQCompactArrayToJson=jkparseQArrayToJson
 	alias jkparseContinuousArrayToJson=jkparseArrayToJson
+	alias jkparseQContinuousArrayToJson=jkparseQArrayToJson
 else
-	function jkparseObjToJson
+	jkparseObjToJson ()
 	{
 		#  key and comma flag local variables
 		echo -n '{'
@@ -189,8 +279,62 @@ else
 		echo -n '}'
 	}
 	
-	#  This version handles sparse arrays (arrays that are missing indices).
-	function jkparseArrayToJson
+	jkparseQObjToJson ()
+	{
+		#  key and comma flag local variables
+		echo -n '{'
+		eval "typeset k$1 c$1=
+		for k$1 in \"\${!$1[@]}\";do
+			[ -z \"\$c$1\" ] || echo -n ,
+			c$1=1
+			if [ \"\$k$1\" = \"\${2-$'\1'}\" ];then
+				printf '\"\"'
+			else
+				jkparse -qs -- \"\$k$1\"
+			fi
+			echo -n :\"\${$1[\$k$1]}\"
+		done"
+		echo -n '}'
+	}
+	
+	#  When the shell array is sparse, this version will generate null values
+	# for the missing indices in the resulting JSON.
+	jkparseArrayToJson ()
+	{
+		#  index and limit local variables.
+		echo -n [
+		eval "typeset i$1$2=-1 l$2$1
+		for l$2$1 in \"\${!$1[@]}\";do true; done
+		let l$2$1++
+		while [ \$((++i$1$2)) -lt \$l$2$1 ];do
+			[ \"\$i$1$2\" = 0 ] || echo -n ,
+			case \"\${$2[\$i$1$2]}\" in
+				s) jkparse -qs -- \"\${$1[\$i$1$2]}\";;
+				n) echo -n null;;
+				*) echo -n \"\${$1[\$i$1$2]-null}\";;
+			esac
+		done"
+		echo -n ]
+	}
+	
+	jkparseQArrayToJson ()
+	{
+		#  index and limit local variables.
+		echo -n [
+		eval "typeset i$1=-1 l$1
+		for l$1 in \"\${!$1[@]}\";do :; done
+		let l$1++
+		while [ \$((++i$1)) -lt \$l$1 ];do
+			[ \"\$i$1\" = 0 ] || echo -n ,
+			echo -n \"\${$1[\$i$1]-null}\"
+		done"
+		echo -n ]
+	}
+	
+	#  When the shell array is sparse, this version will skip missing indices
+	# in the resulting JSON.  A sparse array will not have the same indices in
+	# JSON as it did in the shell (zsh's count from 1 notwithstanding)
+	jkparseCompactArrayToJson ()
 	{
 		#  key and comma flag local variables
 		echo -n [
@@ -206,10 +350,21 @@ else
 		done"
 		echo -n ]
 	}
-
-	#  This may be faster than jkparseArrayToJson(), but it does not handle
-	# missing elements gracefully.
-	function jkparseContinuousArrayToJson
+	
+	jkparseQCompactArrayToJson ()
+	{
+		#  key and comma flag local variables
+		echo -n [
+		eval "typeset k$1 c$1=
+		for k$1 in \"\${!$1[@]}\";do
+			[ -z \"\$c$1\" ] || echo -n ,
+			c$1=1
+			echo -n \"\${$1[\$k$1]}\"
+		done"
+		echo -n ]
+	}
+	
+	jkparseContinuousArrayToJson()
 	{
 		#  index local variable
 		echo -n [
@@ -221,6 +376,18 @@ else
 				n) echo -n null;;
 				*) echo -n \"\${$1[\$i$1$2]}\";;
 			esac
+		done"
+		echo -n ]
+	}
+	
+	jkparseQContinuousArrayToJson()
+	{
+		#  index local variable
+		echo -n [
+		eval "typeset i$1=-1
+		while [ \$((++i$1)) -lt \${#$1[@]} ];do
+			[ \"\$i$1\" = 0 ] || echo -n ,
+			echo -n \"\${$1[\$i$1]}\"
 		done"
 		echo -n ]
 	}
